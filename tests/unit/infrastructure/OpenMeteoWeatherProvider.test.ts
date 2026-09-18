@@ -19,6 +19,8 @@ const config: AppConfig = {
   nominatimUserAgent: "tp-gestion-dependances-tests/1.0",
   httpTimeoutMs: 2000,
   openMeteoTimezone: "auto",
+  banBaseUrl: "https://ban.test",
+  metNorwayBaseUrl: "https://met-norway.test",
 };
 
 function buildProvider(overrides: Partial<AppConfig> = {}): OpenMeteoWeatherProvider {
@@ -50,14 +52,10 @@ describe("OpenMeteoWeatherProvider", () => {
 
     expect(weather).toEqual({
       timezone: "Europe/Paris",
-      hourly: {
-        time: ["2024-01-01T00:00", "2024-01-01T01:00"],
-        shortwaveRadiation: [0, 12.5],
-      },
-      hourlyUnits: {
-        time: "iso8601",
-        shortwaveRadiation: "W/m²",
-      },
+      hourly: [
+        { time: "2024-01-01T00:00", shortwaveRadiation: { value: 0, unit: "W/m²" } },
+        { time: "2024-01-01T01:00", shortwaveRadiation: { value: 12.5, unit: "W/m²" } },
+      ],
     });
     expect(capturedUrl?.searchParams.get("latitude")).toBe("44.13");
     expect(capturedUrl?.searchParams.get("longitude")).toBe("4.08");
@@ -104,6 +102,25 @@ describe("OpenMeteoWeatherProvider", () => {
             shortwave_radiation: [0],
           },
           // timezone et hourly_units absents
+        })
+      )
+    );
+
+    await expect(
+      buildProvider().getHourlyForecast({ latitude: 44.13, longitude: 4.08 })
+    ).rejects.toBeInstanceOf(ProviderUnavailableError);
+  });
+
+  it("leve ProviderUnavailableError si hourly.time et hourly.shortwave_radiation ont des longueurs differentes", async () => {
+    server.use(
+      http.get("https://open-meteo.test/v1/forecast", () =>
+        HttpResponse.json({
+          timezone: "Europe/Paris",
+          hourly: {
+            time: ["2024-01-01T00:00", "2024-01-01T01:00"],
+            shortwave_radiation: [0],
+          },
+          hourly_units: { time: "iso8601", shortwave_radiation: "W/m²" },
         })
       )
     );

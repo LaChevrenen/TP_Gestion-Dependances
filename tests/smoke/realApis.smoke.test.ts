@@ -16,8 +16,9 @@ describe.skipIf(!process.env.RUN_SMOKE_TESTS)("Smoke test (reseau reel)", () => 
 
     expect(forecast.location.coordinates.latitude).toBeTypeOf("number");
     expect(forecast.location.coordinates.longitude).toBeTypeOf("number");
-    expect(Array.isArray(forecast.hourly.time)).toBe(true);
-    expect(Array.isArray(forecast.hourly.shortwaveRadiation)).toBe(true);
-    expect(forecast.hourly.time.length).toBeGreaterThan(0);
+    expect(Array.isArray(forecast.hourly)).toBe(true);
+    expect(forecast.hourly.length).toBeGreaterThan(0);
+    expect(forecast.hourly[0]?.shortwaveRadiation?.value).toBeTypeOf("number");
+    expect(forecast.hourly[0]?.shortwaveRadiation?.unit).toBeTypeOf("string");
   }, 15000);
 });

@@ -11,10 +11,17 @@ prévisions de rayonnement solaire horaire (Open-Meteo).
   "latitude": 44.13,
   "longitude": 4.08,
   "timezone": "Europe/Paris",
-  "hourly": { "time": ["2024-01-01T00:00", "..."], "shortwave_radiation": [0, 94, "..."] },
-  "hourly_units": { "time": "iso8601", "shortwave_radiation": "W/m²" }
+  "hourly": [
+    { "time": "2024-01-01T00:00", "shortwaveRadiation": { "value": 0, "unit": "W/m²" } },
+    { "time": "2024-01-01T01:00", "shortwaveRadiation": { "value": 94, "unit": "W/m²" } }
+  ]
 }
 ```
+
+> Forme mise à jour au TP2 : `hourly` est une liste de points horodatés, chaque mesure
+> étant optionnelle. Un fournisseur qui ne mesure pas le rayonnement (ex. MET Norway)
+> renvoie simplement des points sans la clé `shortwaveRadiation`, avec d'autres clés
+> à la place (`temperature`, `windSpeed`). Voir la section [TP2](#tp2--changement-dapi).
 
 Ce dépôt est un TP d'architecture logicielle : l'objectif pédagogique est la gestion
 propre des dépendances (ports/adapters, injection de dépendances via IoC, composition
@@ -50,7 +57,7 @@ Le serveur écoute par défaut sur `http://localhost:3000`.
 ```bash
 curl "http://localhost:3000/forecast?address=Al%C3%A8s"
 # 200 -> { "address": "Alès", "latitude": 44.12, "longitude": 4.08, "timezone": "Europe/Paris",
-#          "hourly": {...}, "hourly_units": { "time": "iso8601", "shortwave_radiation": "W/m²" } }
+#          "hourly": [ { "time": "...", "shortwaveRadiation": { "value": 0, "unit": "W/m²" } }, ... ] }
 
 curl "http://localhost:3000/forecast"
 # 400 -> { "error": "Query parameter 'address' is required and must not be empty" }
@@ -317,3 +324,44 @@ promesse ne tient pas.
 
 Le détail de chaque étape est documenté au fur et à mesure ci-dessous, au fil des
 commits `TP2:`.
+
+### Modèle de domaine neutre (étape 1-2)
+
+L'audit a montré que le domaine du TP1 portait en fait le format Open-Meteo
+(`shortwaveRadiation` obligatoire, tableaux parallèles `time[]`/`valeurs[]` + objet
+`hourly_units` séparé — calqué sur la structure JSON exacte d'Open-Meteo). Impossible
+pour MET Norway, qui ne fournit pas le rayonnement solaire.
+
+Nouveau modèle : une série de **points horodatés**, chaque mesure étant **optionnelle**
+et portant sa propre unité, au lieu de tableaux parallèles à côté d'un objet d'unités :
+
+```ts
+interface WeatherMeasurement { value: number; unit: string; }
+interface HourlyPoint {
+  time: string;
+  temperature?: WeatherMeasurement;
+  shortwaveRadiation?: WeatherMeasurement;
+  windSpeed?: WeatherMeasurement;
+}
+```
+
+Chaque provider ne remplit que ce qu'il sait mesurer (Open-Meteo → `shortwaveRadiation`
+uniquement ; MET Norway → `temperature`/`windSpeed` uniquement, jamais
+`shortwaveRadiation`). La réponse HTTP est maintenant un mapping direct de ce modèle
+(plus aucune trace de `shortwave_radiation`/`hourly_units` dans `presentation/`).
+
+### ADR — Erreur BAN pour une requête trop courte
+
+**Contexte** : la BAN répond HTTP 400 (pas un tableau vide) quand la requête fait moins
+de 3 caractères.
+
+**Décision** : `BanGeocoder` traduit ce 400 en `AddressNotFoundError`, la même erreur
+domaine qu'un résultat vide — pas de nouveau type d'erreur dédié à cette contrainte.
+
+**Justification** : "la requête est trop courte pour être géocodée" reste, du point de
+vue de l'appelant, un cas de "cette adresse n'a pas pu être résolue". Créer une erreur
+domaine spécifique à une contrainte syntaxique propre à *un seul* fournisseur (Nominatim
+n'a pas cette limite) aurait été une fuite d'abstraction à l'envers : le domaine se
+mettrait à connaître un détail d'implémentation d'un adapter particulier. C'est un choix
+assumé, pas un oubli — `ProviderUnavailableError` reste réservé aux vraies pannes
+(timeout, HTTP 5xx, réponse malformée).

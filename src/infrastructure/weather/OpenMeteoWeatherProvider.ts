@@ -1,7 +1,7 @@
 import { inject, injectable } from "inversify";
 import { TYPES } from "../../types.js";
 import type { Coordinates } from "../../domain/Coordinates.js";
-import type { WeatherForecast } from "../../domain/Forecast.js";
+import type { HourlyPoint, WeatherForecast } from "../../domain/Forecast.js";
 import { ProviderUnavailableError } from "../../domain/errors/ProviderUnavailableError.js";
 import type { WeatherProvider } from "../../domain/ports/WeatherProvider.js";
 import type { AppConfig } from "../../config/Config.js";
@@ -35,29 +35,31 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
 
     const time = response.hourly?.time;
     const shortwaveRadiation = response.hourly?.shortwave_radiation;
+    // timezone vient de la reponse (parametre timezone=auto repercute par Open-Meteo),
+    // jamais d'une valeur en dur : voir README, section ADR.
     const { timezone } = response;
-    const timeUnit = response.hourly_units?.time;
     const shortwaveRadiationUnit = response.hourly_units?.shortwave_radiation;
 
     if (
       !Array.isArray(time) ||
       !Array.isArray(shortwaveRadiation) ||
+      time.length !== shortwaveRadiation.length ||
       typeof timezone !== "string" ||
-      typeof timeUnit !== "string" ||
       typeof shortwaveRadiationUnit !== "string"
     ) {
       throw new ProviderUnavailableError(
         PROVIDER_NAME,
         new Error(
-          "Malformed Open-Meteo response: missing timezone, hourly.time, hourly.shortwave_radiation or hourly_units"
+          "Malformed Open-Meteo response: missing timezone, hourly.time, hourly.shortwave_radiation or hourly_units.shortwave_radiation"
         )
       );
     }
 
-    return {
-      timezone,
-      hourly: { time, shortwaveRadiation },
-      hourlyUnits: { time: timeUnit, shortwaveRadiation: shortwaveRadiationUnit },
-    };
+    const hourly: HourlyPoint[] = time.map((t, i) => ({
+      time: t,
+      shortwaveRadiation: { value: shortwaveRadiation[i]!, unit: shortwaveRadiationUnit },
+    }));
+
+    return { timezone, hourly };
   }
 }

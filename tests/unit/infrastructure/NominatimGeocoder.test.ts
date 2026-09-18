@@ -20,6 +20,8 @@ const config: AppConfig = {
   nominatimUserAgent: "tp-gestion-dependances-tests/1.0",
   httpTimeoutMs: 2000,
   openMeteoTimezone: "auto",
+  banBaseUrl: "https://ban.test",
+  metNorwayBaseUrl: "https://met-norway.test",
 };
 
 function buildGeocoder(): NominatimGeocoder {

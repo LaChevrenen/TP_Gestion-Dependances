@@ -27,7 +27,11 @@ export class FetchHttpClient implements HttpClient {
     }
 
     if (!response.ok) {
-      throw new HttpRequestError(`Unexpected status ${response.status} from ${url}`);
+      throw new HttpRequestError(
+        `Unexpected status ${response.status} from ${url}`,
+        undefined,
+        response.status
+      );
     }
 
     try {

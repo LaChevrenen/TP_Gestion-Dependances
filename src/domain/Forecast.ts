@@ -1,24 +1,24 @@
 import type { Location } from "./Location.js";
 
-export interface HourlyReadings {
-  readonly time: readonly string[];
-  readonly shortwaveRadiation: readonly number[];
+export interface WeatherMeasurement {
+  readonly value: number;
+  readonly unit: string;
 }
 
-export interface HourlyUnits {
+export interface HourlyPoint {
   readonly time: string;
-  readonly shortwaveRadiation: string;
+  readonly temperature?: WeatherMeasurement;
+  readonly shortwaveRadiation?: WeatherMeasurement;
+  readonly windSpeed?: WeatherMeasurement;
 }
 
 export interface WeatherForecast {
   readonly timezone: string;
-  readonly hourly: HourlyReadings;
-  readonly hourlyUnits: HourlyUnits;
+  readonly hourly: readonly HourlyPoint[];
 }
 
 export interface Forecast {
   readonly location: Location;
   readonly timezone: string;
-  readonly hourly: HourlyReadings;
-  readonly hourlyUnits: HourlyUnits;
+  readonly hourly: readonly HourlyPoint[];
 }

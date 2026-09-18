@@ -18,7 +18,6 @@ export class ForecastService {
       location: { address, coordinates },
       timezone: weather.timezone,
       hourly: weather.hourly,
-      hourlyUnits: weather.hourlyUnits,
     };
   }
 }

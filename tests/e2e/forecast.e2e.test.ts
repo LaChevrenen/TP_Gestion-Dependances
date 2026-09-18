@@ -85,14 +85,7 @@ describe("GET /forecast (e2e)", () => {
       latitude: 44.1279,
       longitude: 4.0817,
       timezone: "Europe/Paris",
-      hourly: {
-        time: ["2024-01-01T00:00"],
-        shortwave_radiation: [0],
-      },
-      hourly_units: {
-        time: "iso8601",
-        shortwave_radiation: "W/m²",
-      },
+      hourly: [{ time: "2024-01-01T00:00", shortwaveRadiation: { value: 0, unit: "W/m²" } }],
     });
   });
 
