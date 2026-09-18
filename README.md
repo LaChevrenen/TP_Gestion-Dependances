@@ -264,11 +264,14 @@ ligne dans `container.ts` — cohérent avec le rate limit Nominatim (~1 req/s).
 | `msw` | Externe | Directe (dev) | Explicite | Faible (tests uniquement) | Faible/Moyen — écosystème plus jeune que nock, mais seul à supporter `fetch` natif de façon stable (voir note ci-dessous) |
 | `eslint` / `typescript-eslint` | Externe | Directe (dev) | Explicite | Faible | Faible |
 | `tsx` | Externe | Directe (dev) | Explicite | Faible (dev server uniquement) | Faible |
-| **API Nominatim** (`nominatim.openstreetmap.org`) | Externe (service, pas un paquet) | Directe (`NominatimGeocoder`) | Explicite dans le code, **implicite** dans son contrat (pas de SLA) | Fort — en tête de chaîne, bloquant pour toute la fonctionnalité | **Fort — SPOF** (voir section dédiée) |
-| **API Open-Meteo** (`api.open-meteo.com`) | Externe (service) | Directe (`OpenMeteoWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen — isolé derrière un adapter, mais bloquant en aval | Moyen — gratuit, sans SLA formel, mais historiquement permissif |
-| Variables d'environnement (`PORT`, `NOMINATIM_BASE_URL`, `OPEN_METEO_BASE_URL`, `NOMINATIM_USER_AGENT`, `HTTP_TIMEOUT_MS`, `OPEN_METEO_TIMEZONE`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence) | Faible (valeurs par défaut sûres) | Faible — documenté dans `.env.example` |
-| User-Agent Nominatim | — (politique d'usage externe) | Directe | **Implicite** (pas une erreur HTTP formelle, juste une politique d'usage) | Faible techniquement, **fort en pratique** | Moyen — un User-Agent absent/générique peut faire bannir l'IP silencieusement |
-| Format des réponses JSON externes (Nominatim, Open-Meteo) | — (contrat non versionné) | Directe | **Implicite** (pas de schéma/OpenAPI garanti) | Fort — tout le mapping anti-corruption en dépend | Moyen — mitigé : réponse malformée → `ProviderUnavailableError` (502) plutôt qu'un crash |
+| `dependency-cruiser` *(TP2)* | Externe | Directe (dev) | Explicite | Faible (analyse statique, n'entre jamais dans `dist/`) | Faible |
+| **API Nominatim** (`nominatim.openstreetmap.org`) | Externe (service, pas un paquet) | Directe (`NominatimGeocoder`) | Explicite dans le code, **implicite** dans son contrat (pas de SLA) | Fort si sélectionné — en tête de chaîne, bloquant pour toute la fonctionnalité | **Fort — SPOF potentiel** (voir section dédiée) |
+| **API Open-Meteo** (`api.open-meteo.com`) | Externe (service) | Directe (`OpenMeteoWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen — isolé derrière un adapter, mais bloquant en aval si sélectionné | Moyen — gratuit, sans SLA formel, mais historiquement permissif |
+| **API BAN** (`api-adresse.data.gouv.fr`) *(TP2)* | Externe (service public français) | Directe (`BanGeocoder`) | Explicite dans le code, implicite dans son contrat | Fort si sélectionné — même position en tête de chaîne que Nominatim | **Fort si sélectionné** — en plus : **souveraineté** (couverture France uniquement ; inutilisable tel quel pour géocoder une adresse hors de France, contrairement à Nominatim qui est mondial) |
+| **API MET Norway** (`api.met.no`) *(TP2)* | Externe (service public norvégien) | Directe (`MetNorwayWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen si sélectionné — isolé derrière un adapter | Moyen/Fort — **User-Agent obligatoire non générique** (403 sinon, contrôlé au démarrage par `ConfigurationError`), conditions d'usage et quotas propres à MET Norway (service d'un institut météorologique national, pas un fournisseur commercial avec SLA) |
+| Variables d'environnement (`PORT`, `*_BASE_URL`, `NOMINATIM_USER_AGENT`, `OPEN_METEO_USER_AGENT`, `HTTP_TIMEOUT_MS`, `OPEN_METEO_TIMEZONE`, `GEOCODER_PROVIDER`, `WEATHER_PROVIDER`, `MET_NORWAY_USER_AGENT`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence, sauf `MET_NORWAY_USER_AGENT` validé au démarrage si `met-norway` selectionné) | Faible (valeurs par défaut sûres pour tout sauf le choix de fournisseur) | Faible — documenté dans `.env.example`, validation explicite (`ConfigurationError`) |
+| User-Agent Nominatim / MET Norway | — (politique d'usage externe) | Directe | **Implicite** (pas une erreur HTTP formelle, juste une politique d'usage) | Faible techniquement, **fort en pratique** | Moyen — un User-Agent absent/générique peut faire bannir l'IP (Nominatim) ou renvoyer 403 (MET Norway) silencieusement pour le premier ; contrôlé au démarrage pour le second |
+| Format des réponses JSON externes (Nominatim, Open-Meteo, BAN, MET Norway) | — (contrat non versionné) | Directe | **Implicite** (pas de schéma/OpenAPI garanti) | Fort — tout le mapping anti-corruption en dépend | Moyen — mitigé : réponse malformée → `ProviderUnavailableError` (502) plutôt qu'un crash |
 | Rate limit Nominatim (~1 req/s, usage policy) | — | Directe (appelée à chaque requête entrante) | **Implicite** (non enforced côté code) | Fort si trafic élevé | Fort — cf. SPOF |
 | Fuseau horaire / unités Open-Meteo (`timezone`, `hourly_units`) | — (contrat non versionné) | Directe (mappés dans `OpenMeteoWeatherProvider`, fuseau demandé via `OPEN_METEO_TIMEZONE`, défaut `"auto"`) | **Implicite** (Open-Meteo peut changer les libellés d'unité, ex. `"W/m²"`, sans préavis contractuel) | Moyen — consommé uniquement en presentation pour l'affichage, n'impacte pas la logique métier | Faible/Moyen — mitigé comme le reste du format JSON externe : absence de `timezone`/`hourly_units` → `ProviderUnavailableError` (502) plutôt qu'une valeur silencieusement fausse |
 | Node.js runtime (`fetch`/`AbortController` natifs, ESM) | Externe | Directe | Implicite (version LTS attendue) | Fort (toute l'app) | Faible |
@@ -292,6 +295,19 @@ peut se traduire par un bannissement d'IP silencieux en cas de non-respect.
 - À plus long terme : contractualiser (self-host Nominatim, ou un fournisseur
   commercial avec SLA) si le volume de requêtes dépasse ce que le service public
   tolère.
+
+**Nouveau SPOF potentiel introduit par le TP2 : le choix de fournisseur en production.**
+Depuis l'étape 3, `GEOCODER_PROVIDER`/`WEATHER_PROVIDER` peuvent pointer vers n'importe
+laquelle des 4 API (Nominatim, BAN, Open-Meteo, MET Norway) — mais si le déploiement en
+production **fige** ce choix sur un seul couple (ex. `nominatim`/`open-meteo` partout,
+tout le temps), on a simplement déplacé le SPOF sans le réduire : c'est toujours une
+seule API externe qui bloque toute la chaîne si elle tombe. Le côté configurable ne
+*mitige* ce risque que si quelque chose exploite réellement cette configurabilité —
+aujourd'hui rien ne le fait automatiquement (pas de bascule automatique, pas de
+fallback). Actuellement le risque est donc **mitigé en théorie** (le point d'extension
+existe, changer de fournisseur ne coûte qu'une variable d'env) mais **pas en pratique**
+(personne ne bascule tant qu'un humain n'a pas décidé de changer la config et redémarré
+le service).
 
 Open-Meteo est la deuxième dépendance la plus risquée (même schéma de risque, mais
 moins critique : historiquement plus permissif, pas de contrainte 1 req/s documentée).
@@ -349,6 +365,7 @@ tp-gestion-dependances@1.0.0
 +-- @types/express@4.17.21
 +-- @types/node@22.10.10
 +-- @types/supertest@6.0.2
++-- dependency-cruiser@18.3.1
 +-- eslint@9.39.5
 +-- express@4.22.3
 +-- inversify@6.2.2
@@ -360,6 +377,8 @@ tp-gestion-dependances@1.0.0
 +-- typescript@5.7.3
 `-- vitest@2.1.9
 ```
+
+*(`dependency-cruiser` ajouté au TP2, étape 5 — voir la section TP2 pour son rôle.)*
 
 ## Notes techniques
 
@@ -490,3 +509,204 @@ couvre aussi les tests de contrat) ; `npm run arch:graph` régénère le graphe 
 ci-dessus. Premier passage sur le code existant : **0 violation** — confirmé aussi en
 vérifiant que les règles mordent bien (import volontairement fautif ajouté puis retiré,
 voir historique de commit de cette étape).
+
+## TP2 — Bilan
+
+Comparaison factuelle entre l'état final du TP1 (tag Git `tp1`) et l'état final du TP2
+(`HEAD`) : `git diff --stat tp1..HEAD` → **33 fichiers changés, +2146/-148 lignes**.
+Détail ci-dessous, classé par nature du changement.
+
+### Fichiers AJOUTÉS (14)
+
+| Fichier | Lignes | Contenu |
+|---|---|---|
+| `src/config/ConfigurationError.ts` | +6 | Erreur dédiée à une config invalide (étape 3) |
+| `src/infrastructure/geocoding/BanGeocoder.ts` | +64 | Adapter BAN (étape 2) |
+| `src/infrastructure/geocoding/BanTypes.ts` | +9 | DTO privé à BanGeocoder (étape 2) |
+| `src/infrastructure/weather/MetNorwayTypes.ts` | +27 | DTO privé à MetNorwayWeatherProvider (étape 2) |
+| `src/infrastructure/weather/MetNorwayWeatherProvider.ts` | +82 | Adapter MET Norway (étape 2) |
+| `tests/unit/container.test.ts` | +75 | Tests bootstrap : sélection de fournisseur, config invalide (étape 3) |
+| `tests/contracts/geocoder.contract.ts` | +61 | Fonction de contrat partagée `runGeocoderContract` (étape 4) |
+| `tests/contracts/weather-provider.contract.ts` | +102 | Fonction de contrat partagée `runWeatherProviderContract` (étape 4) |
+| `tests/contracts/geocoder.nominatim.contract.test.ts` | +55 | Fixtures Nominatim pour le contrat (étape 4) |
+| `tests/contracts/geocoder.ban.contract.test.ts` | +74 | Fixtures BAN + cas spécifique "< 3 caractères" (étape 4) |
+| `tests/contracts/weather-provider.open-meteo.contract.test.ts` | +74 | Fixtures Open-Meteo pour le contrat (étape 4) |
+| `tests/contracts/weather-provider.met-norway.contract.test.ts` | +80 | Fixtures MET Norway pour le contrat (étape 4) |
+| `.dependency-cruiser.cjs` | +120 | Règles anti-fuite (étape 5) |
+| `docs/dependency-graph.mmd` | +124 | Graphe généré, source du Mermaid du README (étape 5) |
+
+### Fichiers MODIFIÉS (19), avec la raison de chaque modification
+
+| Fichier | +/- | Raison (étape) |
+|---|---|---|
+| `src/domain/Forecast.ts` | +9/-9 | La fuite corrigée : `HourlyReadings`/`HourlyUnits` (tableaux parallèles calqués sur Open-Meteo) → `HourlyPoint`/`WeatherMeasurement` (série de points, mesures optionnelles) — étape 1-2 |
+| `src/application/ForecastService.ts` | +0/-1 | Suppression du champ `hourlyUnits` distinct, fusionné dans chaque mesure — étape 2 |
+| `src/presentation/forecastResponse.ts` | +3/-17 | La réponse HTTP suit le nouveau domaine au lieu du format Open-Meteo recopié — étape 2 |
+| `src/infrastructure/weather/OpenMeteoWeatherProvider.ts` | +13/-9 | Zip vers `HourlyPoint[]` (étape 2) ; + envoi d'un User-Agent et rejet d'une série vide (étape 4, imprévu — voir plus bas) |
+| `src/infrastructure/http/HttpRequestError.ts` | +2/-1 | + champ `status` structuré, pour que `BanGeocoder` distingue un 400 sans parser un message (étape 2, imprévu) |
+| `src/infrastructure/http/FetchHttpClient.ts` | +5/-1 | Renseigne ce `status` sur les réponses non-2xx (étape 2, imprévu) |
+| `src/config/Config.ts` | +52/-0 | + `banBaseUrl`, `metNorwayBaseUrl`, `metNorwayUserAgent` (étape 2) ; + `openMeteoUserAgent` (étape 4, imprévu) ; + `geocoderProvider`/`weatherProvider` et validation (étape 3) |
+| `src/container.ts` | +20/-4 | Bindings fixes → table nom→implémentation indexée par la config (étape 3) |
+| `src/main.ts` | +13/-1 | `try/catch` autour de `buildContainer()` → sortie propre sur `ConfigurationError` (étape 3) |
+| `.env.example` | +25/-0 | Documente les 8 nouvelles variables (étapes 2, 3, 4) |
+| `eslint.config.js` | +1/-1 | Exclut `*.cjs` du lint (étape 5) |
+| `package.json` | +6/-1 | Scripts `arch`, `arch:graph`, `verify`, `test:contracts` + dépendance `dependency-cruiser` (étapes 4, 5) |
+| `package-lock.json` | +405/-0 | Lockfile (`dependency-cruiser` + transitifs) |
+| `README.md` | +493/-63 | Documentation cumulée de toutes les étapes (incluant cette section bilan) |
+| `tests/e2e/forecast.e2e.test.ts` | +68/-8 | Fixtures adaptées au nouveau domaine (étape 2) ; + cas `GEOCODER_PROVIDER=ban`/`WEATHER_PROVIDER=met-norway` (étape 3) |
+| `tests/unit/application/ForecastService.test.ts` | +25/-20 | Fixtures adaptées au nouveau domaine (étape 2) |
+| `tests/unit/infrastructure/OpenMeteoWeatherProvider.test.ts` | +46/-9 | Idem + tests des ajustements imprévus (étapes 2, 4) |
+| `tests/unit/infrastructure/NominatimGeocoder.test.ts` | +3/-0 | + champ de config requis (étape 3) |
+| `tests/smoke/realApis.smoke.test.ts` | +4/-3 | Adapté au nouveau domaine (étape 2) |
+
+### Fichiers INTACTS (0 diff, vérifié avec `git diff tp1..HEAD -- <fichier>`)
+
+13 fichiers n'ont **jamais été touchés** depuis le tag `tp1`, alors que deux nouveaux
+fournisseurs et la sélection par configuration ont été ajoutés entre-temps :
+
+```
+src/domain/Coordinates.ts
+src/domain/Location.ts
+src/domain/ports/Geocoder.ts
+src/domain/ports/WeatherProvider.ts
+src/domain/errors/AddressNotFoundError.ts
+src/domain/errors/ProviderUnavailableError.ts
+src/presentation/ForecastController.ts
+src/presentation/errorMapping.ts
+src/presentation/createApp.ts
+src/infrastructure/geocoding/NominatimGeocoder.ts
+src/infrastructure/geocoding/NominatimTypes.ts
+src/infrastructure/http/HttpClient.ts
+src/types.ts
+```
+
+### Comptage (hors `tests/`, `README.md`, config d'outillage `.dependency-cruiser.cjs`/`eslint.config.js`/`package.json`/`package-lock.json`/`docs/`)
+
+| | Nombre | Fichiers |
+|---|---|---|
+| **Ajoutés** | 5 | `ConfigurationError.ts`, `BanGeocoder.ts`, `BanTypes.ts`, `MetNorwayTypes.ts`, `MetNorwayWeatherProvider.ts` |
+| **Modifiés** | 10 | `.env.example`, `ForecastService.ts`, `Config.ts`, `container.ts`, `Forecast.ts`, `FetchHttpClient.ts`, `HttpRequestError.ts`, `OpenMeteoWeatherProvider.ts`, `main.ts`, `forecastResponse.ts` |
+| **Supprimés** | 0 | — |
+| **Intacts** | 13 | (liste ci-dessus) |
+
+Sur les 23 fichiers `src/` qui existaient déjà au tag `tp1`, **13 (56 %) n'ont eu besoin
+d'aucune modification** pour absorber deux nouveaux fournisseurs externes et un
+mécanisme de sélection par configuration. `src/` compte 28 fichiers aujourd'hui
+(23 préexistants + 5 nouveaux).
+
+### Ce que le TP2 a révélé sur l'archi du TP1
+
+Le domaine du TP1 (`HourlyReadings { time: string[], shortwaveRadiation: number[] }` +
+`HourlyUnits` à côté) n'était pas un modèle météo neutre : c'était **le format JSON
+d'Open-Meteo recopié presque verbatim** — même nom de champ (`shortwave_radiation` →
+`shortwaveRadiation`), même structure "tableaux parallèles + objet d'unités séparé".
+
+**Pourquoi ça n'a pas été vu au TP1** : avec un seul fournisseur météo, il n'y avait
+littéralement rien pour révéler la fuite. Le domaine et l'adapter Open-Meteo
+coïncidaient parfaitement — l'anti-corruption ne faisait presque aucun travail (mapper
+`shortwave_radiation` vers `shortwaveRadiation`, un simple renommage de casse). Les
+tests du TP1 (unitaires, e2e) passaient tous, `dependency-cruiser` n'existait pas
+encore, et rien dans l'architecture ne pouvait signaler que "le domaine ressemble
+suspicieusement à une seule API externe" — ce n'est **structurellement pas détectable**
+avec un seul fournisseur : il faut un second point de comparaison pour voir qu'un champ
+qui semblait "du domaine" ne l'était pas.
+
+**Ce que ça apprend** : les ports/adapters protègent contre le couplage *technique*
+(HTTP, JSON, timeouts) bien avant de protéger contre le couplage *sémantique* (le
+vocabulaire et la forme des données). Coder un domaine d'après un seul fournisseur
+externe, même avec une couche d'anti-corruption en place, ne garantit pas un domaine
+neutre — ça garantit seulement qu'il est *isolé*, pas qu'il est *correct*. La neutralité
+d'un modèle ne se prouve vraiment qu'en le confrontant à un second fournisseur
+incompatible (ici : MET Norway, qui n'a pas de rayonnement solaire du tout).
+
+### Ce qui a bien résisté
+
+Les 13 fichiers intacts ne sont pas un hasard — ils correspondent exactement aux parties
+qui ne dépendaient déjà que d'abstractions, jamais de détails externes :
+
+- **Les deux ports** (`Geocoder.ts`, `WeatherProvider.ts`) : leur signature
+  (`geocode(address): Promise<Coordinates>`, `getHourlyForecast(coords): Promise<WeatherForecast>`)
+  ne présumait déjà d'aucun format d'API — seulement des types du domaine. Ajouter BAN et
+  MET Norway derrière n'a donc rien demandé de plus que les *implémenter*.
+- **Les erreurs domaine** (`AddressNotFoundError`, `ProviderUnavailableError`) : déjà
+  génériques (un nom de fournisseur en paramètre, jamais un format ou un code HTTP en
+  dur) — assez larges pour couvrir BAN et MET Norway sans modification, y compris leur
+  cas d'erreur inhabituel (BAN 400, MET Norway 403).
+- **`ForecastController.ts` / `errorMapping.ts` / `createApp.ts`** : ils ne parlent qu'au
+  `ForecastService` et aux erreurs domaine, jamais à un adapter. Le changement de
+  fournisseur est invisible à ce niveau par construction — exactement ce que
+  `no-concrete-adapter-outside-container` vérifie maintenant automatiquement.
+- **`NominatimGeocoder.ts`/`NominatimTypes.ts`** : n'avaient aucune raison de changer,
+  Nominatim lui-même n'a pas changé — seul un nouveau voisin (`BanGeocoder`) est apparu
+  à côté.
+
+### Extensions imprévues à l'audit initial
+
+L'audit de l'étape 1 annonçait **7 fichiers à modifier**. Le résultat réel : **10**.
+Comparaison sans enjoliver :
+
+| Annoncé à l'étape 1 | Modifié pour de vrai ? |
+|---|---|
+| `domain/Forecast.ts` | ✅ |
+| `application/ForecastService.ts` | ✅ |
+| `infrastructure/weather/OpenMeteoWeatherProvider.ts` | ✅ |
+| `presentation/forecastResponse.ts` | ✅ |
+| `config/Config.ts` | ✅ |
+| `container.ts` | ✅ |
+| `.env.example` | ✅ |
+| `src/main.ts` | ❌ non prévu (étape 3 : gestion propre de `ConfigurationError`) |
+| `infrastructure/http/HttpRequestError.ts` | ❌ non prévu (étape 2) |
+| `infrastructure/http/FetchHttpClient.ts` | ❌ non prévu (étape 2) |
+
+Les 3 écarts, déjà signalés au moment de chaque étape plutôt que découverts a posteriori
+ici :
+1. **`HttpRequestError`/`FetchHttpClient`** (étape 2) : `BanGeocoder` doit distinguer un
+   400 BAN (adresse trop courte) d'une vraie panne. Plutôt que de parser un message
+   d'erreur, `HttpRequestError` a gagné un champ `status` structuré. C'est un ajustement
+   mineur d'une **abstraction déjà partagée par tous les adapters** (`HttpClient`), pas
+   un contournement — aucun adapter n'a eu besoin de connaître le HTTP au-delà de ce que
+   `HttpClient` lui expose déjà.
+2. **`OpenMeteoWeatherProvider`** (étape 4) : écrire le contrat commun a révélé qu'il
+   n'envoyait aucun User-Agent (alors que MET Norway en envoie un obligatoire) et
+   qu'il traitait une série vide comme une prévision valide plutôt qu'une panne. Corrigé
+   pour que les deux implémentations du port se comportent pareil face aux mêmes
+   scénarios — exactement le genre d'écart qu'un test de contrat est censé révéler.
+3. **`main.ts`** (étape 3) : pas annoncé du tout à l'étape 1 (l'audit initial portait sur
+   la fuite du modèle météo, pas encore sur la sélection de fournisseur, qui n'existait
+   pas encore comme besoin identifié). Ajout mécanique et attendu une fois la validation
+   de config introduite.
+
+**Bilan honnête** : l'estimation initiale a sous-compté de 3 fichiers (43 % de plus que
+prévu), tous dans `infrastructure/`/`main.ts` — jamais dans `domain/`, `application/` ou
+`presentation/`. La direction de la fuite annoncée à l'étape 1 était correcte ; sa
+taille exacte ne l'était pas complètement, pour des raisons découvertes en écrivant le
+code et les tests plutôt qu'en le lisant à l'avance.
+
+### Fuseau horaire, souveraineté et quotas des nouveaux fournisseurs
+
+Ajouté au tableau d'inventaire des dépendances (TP1) : **BAN** (souveraineté — couverture
+France uniquement, contrairement à Nominatim qui est mondial) et **MET Norway**
+(User-Agent non générique obligatoire, sans quoi 403 ; conditions d'usage et quotas d'un
+service d'institut météorologique national, pas d'un fournisseur commercial avec SLA).
+Voir la section [SPOF et dépendance la plus risquée](#spof-et-dépendance-la-plus-risquée),
+mise à jour avec le risque de figer le choix de fournisseur en production.
+
+### État final vérifié
+
+```
+$ npm run verify
+> npm run lint && npm run build && npm run arch && npm test && npm run test:contracts && npm run test:e2e
+
+✔ no dependency violations found (50 modules, 175 dependencies cruised)
+
+ Test Files  5 passed (5)
+      Tests  28 passed (28)   # tests/unit
+
+ Test Files  4 passed (4)
+      Tests  19 passed (19)   # tests/contracts
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)     # tests/e2e
+```
+
+Lint, build, arch, et 54 tests (28 + 19 + 7) passent sur l'état final du TP2.
