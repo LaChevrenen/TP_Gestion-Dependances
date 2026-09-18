@@ -33,13 +33,19 @@ Le serveur écoute par défaut sur `http://localhost:3000`.
 
 ### Exemples de requêtes
 
-> **Sous Windows PowerShell**, `curl` est un alias vers `Invoke-WebRequest`, qui lève
-> une exception sur les réponses non-2xx (400/404/502) et demande confirmation avant
-> de parser le corps de la réponse — ce n'est pas un bug de l'API, seulement un
-> comportement différent de `curl` POSIX. Utilisez `curl.exe` (le vrai binaire curl,
-> qui contourne l'alias) ou `Invoke-RestMethod -SkipHttpErrorCheck` pour retrouver un
-> comportement identique aux exemples ci-dessous. Bash (WSL, Git Bash, macOS, Linux)
-> n'est pas concerné.
+> **Sous Windows PowerShell**, `curl` est un alias vers `Invoke-WebRequest`. Deux
+> pièges : (1) il lève une exception sur les réponses non-2xx (400/404/502) et
+> demande confirmation avant de parser le corps ; (2) même sur un 200, il affiche un
+> **résumé tronqué** (`StatusCode`, `Content` coupé, ...) au lieu du corps JSON — les
+> données sont bien là, juste pas affichées en entier. Ce n'est pas un bug de l'API.
+> Pour voir la réponse complète, utilisez `curl.exe` (le vrai binaire curl) ou
+> `Invoke-RestMethod` (parse directement le JSON) :
+> ```powershell
+> curl.exe "http://localhost:3000/forecast?address=Lyon"
+> # ou
+> Invoke-RestMethod "http://localhost:3000/forecast?address=Lyon" | ConvertTo-Json -Depth 5
+> ```
+> Bash (WSL, Git Bash, macOS, Linux) n'est pas concerné par ces deux pièges.
 
 ```bash
 curl "http://localhost:3000/forecast?address=Al%C3%A8s"
