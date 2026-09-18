@@ -14,7 +14,7 @@ export class FetchHttpClient implements HttpClient {
     let response: Response;
     try {
       response = await fetch(url, {
-        headers: options.headers,
+        ...(options.headers ? { headers: options.headers } : {}),
         signal: controller.signal,
       });
     } catch (err) {
