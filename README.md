@@ -280,3 +280,40 @@ tp-gestion-dependances@1.0.0
   `config/Config.ts`).
 - Aucun `new` de service/adapter en dehors de `container.ts` (hors tests, où des
   fakes écrits à la main implémentent directement les ports du domaine).
+
+## TP2 — Changement d'API
+
+Le TP1 a posé l'architecture (ports/adapters, IoC/DI). Le TP2 met cette architecture à
+l'épreuve : peut-on ajouter un **deuxième géocodeur** et un **deuxième fournisseur
+météo**, sélectionnables par configuration, en modifiant le moins de code existant
+possible ? L'état final du TP1 est figé par le tag Git `tp1` ; tous les commits du TP2
+sont préfixés `TP2:`.
+
+**Objectif** : démontrer que le coût d'ajout d'un fournisseur est bien celui annoncé au
+TP1 ("une classe + une ligne dans `container.ts`"), ou documenter honnêtement où cette
+promesse ne tient pas.
+
+**Nouveaux fournisseurs à intégrer** :
+- Géocodage : [BAN](https://api-adresse.data.gouv.fr/) (Base Adresse Nationale,
+  France uniquement), à côté de Nominatim.
+- Météo : [MET Norway](https://api.met.no/) (locationforecast/2.0/compact), à côté
+  d'Open-Meteo — MET Norway ne fournit pas le rayonnement solaire, ce qui oblige à
+  vérifier que le modèle de domaine ne suppose pas qu'un champ météo est toujours
+  présent.
+
+**Plan** :
+1. Audit : repérer les formats/noms propres à Nominatim ou Open-Meteo qui auraient
+   fui hors de `infrastructure/` (validé avant tout code).
+2. Nouveaux adapters `BanGeocoder` et `MetNorwayWeatherProvider`, derrière les ports
+   existants du domaine.
+3. Sélection du fournisseur par variables d'environnement, résolue uniquement dans
+   `container.ts`.
+4. Tests de contrat : un seul jeu d'assertions par port, exécuté contre chaque
+   implémentation (Nominatim/BAN, Open-Meteo/MET Norway).
+5. Vérification automatisée des règles de dépendances (`dependency-cruiser`) pour
+   garantir qu'aucun DTO d'adapter ne fuit hors de son fichier.
+6. Bilan chiffré (`git diff --stat tp1..HEAD`) : fichiers ajoutés vs modifiés, et
+   raison de chaque modification.
+
+Le détail de chaque étape est documenté au fur et à mesure ci-dessous, au fil des
+commits `TP2:`.
