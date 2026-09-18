@@ -27,6 +27,7 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     let response: OpenMeteoResponse;
     try {
       response = await this.httpClient.getJson<OpenMeteoResponse>(url, {
+        headers: { "User-Agent": this.config.openMeteoUserAgent },
         timeoutMs: this.config.httpTimeoutMs,
       });
     } catch (err) {
@@ -43,6 +44,7 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     if (
       !Array.isArray(time) ||
       !Array.isArray(shortwaveRadiation) ||
+      time.length === 0 ||
       time.length !== shortwaveRadiation.length ||
       typeof timezone !== "string" ||
       typeof shortwaveRadiationUnit !== "string"
@@ -50,7 +52,7 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
       throw new ProviderUnavailableError(
         PROVIDER_NAME,
         new Error(
-          "Malformed Open-Meteo response: missing timezone, hourly.time, hourly.shortwave_radiation or hourly_units.shortwave_radiation"
+          "Malformed or empty Open-Meteo response: missing timezone, hourly.time, hourly.shortwave_radiation or hourly_units.shortwave_radiation"
         )
       );
     }

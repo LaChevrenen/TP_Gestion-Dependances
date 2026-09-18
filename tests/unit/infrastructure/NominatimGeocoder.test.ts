@@ -20,6 +20,7 @@ const config: AppConfig = {
   nominatimUserAgent: "tp-gestion-dependances-tests/1.0",
   httpTimeoutMs: 2000,
   openMeteoTimezone: "auto",
+  openMeteoUserAgent: "tp-gestion-dependances-tests/1.0",
   banBaseUrl: "https://ban.test",
   metNorwayBaseUrl: "https://met-norway.test",
 };

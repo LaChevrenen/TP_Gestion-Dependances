@@ -10,6 +10,7 @@ export interface AppConfig {
   readonly nominatimUserAgent: string;
   readonly httpTimeoutMs: number;
   readonly openMeteoTimezone: string;
+  readonly openMeteoUserAgent: string;
   readonly banBaseUrl: string;
   readonly metNorwayBaseUrl: string;
   readonly metNorwayUserAgent?: string;
@@ -59,6 +60,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       "tp-gestion-dependances/1.0 (contact: julien.andrade24@gmail.com)",
     httpTimeoutMs: Number(env.HTTP_TIMEOUT_MS ?? 5000),
     openMeteoTimezone: env.OPEN_METEO_TIMEZONE ?? "auto",
+    openMeteoUserAgent:
+      env.OPEN_METEO_USER_AGENT ??
+      "tp-gestion-dependances/1.0 (contact: julien.andrade24@gmail.com)",
     banBaseUrl: env.BAN_BASE_URL ?? "https://api-adresse.data.gouv.fr",
     metNorwayBaseUrl: env.MET_NORWAY_BASE_URL ?? "https://api.met.no",
     // Pas de valeur par defaut generique ici : un User-Agent de lib fait 403 chez MET Norway.

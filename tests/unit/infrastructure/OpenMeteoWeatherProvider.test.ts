@@ -19,6 +19,7 @@ const config: AppConfig = {
   nominatimUserAgent: "tp-gestion-dependances-tests/1.0",
   httpTimeoutMs: 2000,
   openMeteoTimezone: "auto",
+  openMeteoUserAgent: "tp-gestion-dependances-tests/1.0",
   banBaseUrl: "https://ban.test",
   metNorwayBaseUrl: "https://met-norway.test",
 };
@@ -28,12 +29,14 @@ function buildProvider(overrides: Partial<AppConfig> = {}): OpenMeteoWeatherProv
 }
 
 describe("OpenMeteoWeatherProvider", () => {
-  it("envoie les query params attendus et mappe le JSON en WeatherForecast", async () => {
+  it("envoie les query params, le User-Agent, et mappe le JSON en WeatherForecast", async () => {
     let capturedUrl: URL | undefined;
+    let capturedUserAgent: string | null = null;
 
     server.use(
       http.get("https://open-meteo.test/v1/forecast", ({ request }) => {
         capturedUrl = new URL(request.url);
+        capturedUserAgent = request.headers.get("User-Agent");
         return HttpResponse.json({
           timezone: "Europe/Paris",
           hourly: {
@@ -61,6 +64,7 @@ describe("OpenMeteoWeatherProvider", () => {
     expect(capturedUrl?.searchParams.get("longitude")).toBe("4.08");
     expect(capturedUrl?.searchParams.get("hourly")).toBe("shortwave_radiation");
     expect(capturedUrl?.searchParams.get("timezone")).toBe("auto");
+    expect(capturedUserAgent).toBe("tp-gestion-dependances-tests/1.0");
   });
 
   it("envoie le fuseau horaire configure dans la query string", async () => {
@@ -102,6 +106,22 @@ describe("OpenMeteoWeatherProvider", () => {
             shortwave_radiation: [0],
           },
           // timezone et hourly_units absents
+        })
+      )
+    );
+
+    await expect(
+      buildProvider().getHourlyForecast({ latitude: 44.13, longitude: 4.08 })
+    ).rejects.toBeInstanceOf(ProviderUnavailableError);
+  });
+
+  it("leve ProviderUnavailableError si hourly.time est vide (aucune serie temporelle)", async () => {
+    server.use(
+      http.get("https://open-meteo.test/v1/forecast", () =>
+        HttpResponse.json({
+          timezone: "Europe/Paris",
+          hourly: { time: [], shortwave_radiation: [] },
+          hourly_units: { time: "iso8601", shortwave_radiation: "W/m²" },
         })
       )
     );
