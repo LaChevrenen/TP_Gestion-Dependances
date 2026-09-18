@@ -33,6 +33,14 @@ Le serveur écoute par défaut sur `http://localhost:3000`.
 
 ### Exemples de requêtes
 
+> **Sous Windows PowerShell**, `curl` est un alias vers `Invoke-WebRequest`, qui lève
+> une exception sur les réponses non-2xx (400/404/502) et demande confirmation avant
+> de parser le corps de la réponse — ce n'est pas un bug de l'API, seulement un
+> comportement différent de `curl` POSIX. Utilisez `curl.exe` (le vrai binaire curl,
+> qui contourne l'alias) ou `Invoke-RestMethod -SkipHttpErrorCheck` pour retrouver un
+> comportement identique aux exemples ci-dessous. Bash (WSL, Git Bash, macOS, Linux)
+> n'est pas concerné.
+
 ```bash
 curl "http://localhost:3000/forecast?address=Al%C3%A8s"
 # 200 -> { "address": "Alès", "latitude": 44.12, "longitude": 4.08, "timezone": "Europe/Paris",
@@ -46,6 +54,13 @@ curl "http://localhost:3000/forecast?address=xyzzy-adresse-inexistante"
 
 # Si Nominatim ou Open-Meteo est indisponible / timeout / répond un format invalide :
 # 502 -> { "error": "The address geocoding or weather forecast provider is currently unavailable" }
+```
+
+```powershell
+# Equivalent PowerShell (curl.exe = vrai binaire curl, contourne l'alias Invoke-WebRequest)
+curl.exe "http://localhost:3000/forecast?address=Al%C3%A8s"
+curl.exe "http://localhost:3000/forecast"
+curl.exe "http://localhost:3000/forecast?address=xyzzy-adresse-inexistante"
 ```
 
 ### Scripts npm
