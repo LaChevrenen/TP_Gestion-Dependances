@@ -1,7 +1,7 @@
 import { inject, injectable } from "inversify";
 import { TYPES } from "../../types.js";
 import type { Coordinates } from "../../domain/Coordinates.js";
-import type { HourlyReadings } from "../../domain/Forecast.js";
+import type { WeatherForecast } from "../../domain/Forecast.js";
 import { ProviderUnavailableError } from "../../domain/errors/ProviderUnavailableError.js";
 import type { WeatherProvider } from "../../domain/ports/WeatherProvider.js";
 import type { AppConfig } from "../../config/Config.js";
@@ -17,11 +17,12 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
     @inject(TYPES.Config) private readonly config: AppConfig
   ) {}
 
-  async getHourlyForecast(coordinates: Coordinates): Promise<HourlyReadings> {
+  async getHourlyForecast(coordinates: Coordinates): Promise<WeatherForecast> {
     const url =
       `${this.config.openMeteoBaseUrl}/v1/forecast` +
       `?latitude=${coordinates.latitude}&longitude=${coordinates.longitude}` +
-      `&hourly=shortwave_radiation`;
+      `&hourly=shortwave_radiation` +
+      `&timezone=${encodeURIComponent(this.config.openMeteoTimezone)}`;
 
     let response: OpenMeteoResponse;
     try {
@@ -34,14 +35,29 @@ export class OpenMeteoWeatherProvider implements WeatherProvider {
 
     const time = response.hourly?.time;
     const shortwaveRadiation = response.hourly?.shortwave_radiation;
+    const { timezone } = response;
+    const timeUnit = response.hourly_units?.time;
+    const shortwaveRadiationUnit = response.hourly_units?.shortwave_radiation;
 
-    if (!Array.isArray(time) || !Array.isArray(shortwaveRadiation)) {
+    if (
+      !Array.isArray(time) ||
+      !Array.isArray(shortwaveRadiation) ||
+      typeof timezone !== "string" ||
+      typeof timeUnit !== "string" ||
+      typeof shortwaveRadiationUnit !== "string"
+    ) {
       throw new ProviderUnavailableError(
         PROVIDER_NAME,
-        new Error("Malformed Open-Meteo response: missing hourly.time or hourly.shortwave_radiation")
+        new Error(
+          "Malformed Open-Meteo response: missing timezone, hourly.time, hourly.shortwave_radiation or hourly_units"
+        )
       );
     }
 
-    return { time, shortwaveRadiation };
+    return {
+      timezone,
+      hourly: { time, shortwaveRadiation },
+      hourlyUnits: { time: timeUnit, shortwaveRadiation: shortwaveRadiationUnit },
+    };
   }
 }

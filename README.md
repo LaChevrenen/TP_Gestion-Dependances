@@ -10,7 +10,9 @@ prévisions de rayonnement solaire horaire (Open-Meteo).
   "address": "Alès",
   "latitude": 44.13,
   "longitude": 4.08,
-  "hourly": { "time": ["2024-01-01T00:00", "..."], "shortwave_radiation": [0, 94, "..."] }
+  "timezone": "Europe/Paris",
+  "hourly": { "time": ["2024-01-01T00:00", "..."], "shortwave_radiation": [0, 94, "..."] },
+  "hourly_units": { "time": "iso8601", "shortwave_radiation": "W/m²" }
 }
 ```
 
@@ -33,7 +35,8 @@ Le serveur écoute par défaut sur `http://localhost:3000`.
 
 ```bash
 curl "http://localhost:3000/forecast?address=Al%C3%A8s"
-# 200 -> { "address": "Alès", "latitude": 44.12, "longitude": 4.08, "hourly": {...} }
+# 200 -> { "address": "Alès", "latitude": 44.12, "longitude": 4.08, "timezone": "Europe/Paris",
+#          "hourly": {...}, "hourly_units": { "time": "iso8601", "shortwave_radiation": "W/m²" } }
 
 curl "http://localhost:3000/forecast"
 # 400 -> { "error": "Query parameter 'address' is required and must not be empty" }
@@ -149,10 +152,11 @@ ligne dans `container.ts` — cohérent avec le rate limit Nominatim (~1 req/s).
 | `tsx` | Externe | Directe (dev) | Explicite | Faible (dev server uniquement) | Faible |
 | **API Nominatim** (`nominatim.openstreetmap.org`) | Externe (service, pas un paquet) | Directe (`NominatimGeocoder`) | Explicite dans le code, **implicite** dans son contrat (pas de SLA) | Fort — en tête de chaîne, bloquant pour toute la fonctionnalité | **Fort — SPOF** (voir section dédiée) |
 | **API Open-Meteo** (`api.open-meteo.com`) | Externe (service) | Directe (`OpenMeteoWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen — isolé derrière un adapter, mais bloquant en aval | Moyen — gratuit, sans SLA formel, mais historiquement permissif |
-| Variables d'environnement (`PORT`, `NOMINATIM_BASE_URL`, `OPEN_METEO_BASE_URL`, `NOMINATIM_USER_AGENT`, `HTTP_TIMEOUT_MS`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence) | Faible (valeurs par défaut sûres) | Faible — documenté dans `.env.example` |
+| Variables d'environnement (`PORT`, `NOMINATIM_BASE_URL`, `OPEN_METEO_BASE_URL`, `NOMINATIM_USER_AGENT`, `HTTP_TIMEOUT_MS`, `OPEN_METEO_TIMEZONE`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence) | Faible (valeurs par défaut sûres) | Faible — documenté dans `.env.example` |
 | User-Agent Nominatim | — (politique d'usage externe) | Directe | **Implicite** (pas une erreur HTTP formelle, juste une politique d'usage) | Faible techniquement, **fort en pratique** | Moyen — un User-Agent absent/générique peut faire bannir l'IP silencieusement |
 | Format des réponses JSON externes (Nominatim, Open-Meteo) | — (contrat non versionné) | Directe | **Implicite** (pas de schéma/OpenAPI garanti) | Fort — tout le mapping anti-corruption en dépend | Moyen — mitigé : réponse malformée → `ProviderUnavailableError` (502) plutôt qu'un crash |
 | Rate limit Nominatim (~1 req/s, usage policy) | — | Directe (appelée à chaque requête entrante) | **Implicite** (non enforced côté code) | Fort si trafic élevé | Fort — cf. SPOF |
+| Fuseau horaire / unités Open-Meteo (`timezone`, `hourly_units`) | — (contrat non versionné) | Directe (mappés dans `OpenMeteoWeatherProvider`, fuseau demandé via `OPEN_METEO_TIMEZONE`, défaut `"auto"`) | **Implicite** (Open-Meteo peut changer les libellés d'unité, ex. `"W/m²"`, sans préavis contractuel) | Moyen — consommé uniquement en presentation pour l'affichage, n'impacte pas la logique métier | Faible/Moyen — mitigé comme le reste du format JSON externe : absence de `timezone`/`hourly_units` → `ProviderUnavailableError` (502) plutôt qu'une valeur silencieusement fausse |
 | Node.js runtime (`fetch`/`AbortController` natifs, ESM) | Externe | Directe | Implicite (version LTS attendue) | Fort (toute l'app) | Faible |
 
 ## SPOF et dépendance la plus risquée

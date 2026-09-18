@@ -19,6 +19,7 @@ const config: AppConfig = {
   openMeteoBaseUrl: "https://open-meteo.test",
   nominatimUserAgent: "tp-gestion-dependances-tests/1.0",
   httpTimeoutMs: 2000,
+  openMeteoTimezone: "auto",
 };
 
 function buildGeocoder(): NominatimGeocoder {

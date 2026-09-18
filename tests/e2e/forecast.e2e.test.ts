@@ -58,9 +58,14 @@ function mockOpenMeteoSuccess(): void {
   server.use(
     http.get(`${OPEN_METEO_BASE_URL}/v1/forecast`, () =>
       HttpResponse.json({
+        timezone: "Europe/Paris",
         hourly: {
           time: ["2024-01-01T00:00"],
           shortwave_radiation: [0],
+        },
+        hourly_units: {
+          time: "iso8601",
+          shortwave_radiation: "W/m²",
         },
       })
     )
@@ -79,9 +84,14 @@ describe("GET /forecast (e2e)", () => {
       address: "Ales",
       latitude: 44.1279,
       longitude: 4.0817,
+      timezone: "Europe/Paris",
       hourly: {
         time: ["2024-01-01T00:00"],
         shortwave_radiation: [0],
+      },
+      hourly_units: {
+        time: "iso8601",
+        shortwave_radiation: "W/m²",
       },
     });
   });

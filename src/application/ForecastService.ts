@@ -13,10 +13,12 @@ export class ForecastService {
 
   async getForecast(address: string): Promise<Forecast> {
     const coordinates = await this.geocoder.geocode(address);
-    const hourly = await this.weatherProvider.getHourlyForecast(coordinates);
+    const weather = await this.weatherProvider.getHourlyForecast(coordinates);
     return {
       location: { address, coordinates },
-      hourly,
+      timezone: weather.timezone,
+      hourly: weather.hourly,
+      hourlyUnits: weather.hourlyUnits,
     };
   }
 }

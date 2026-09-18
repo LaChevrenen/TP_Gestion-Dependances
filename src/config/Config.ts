@@ -4,6 +4,7 @@ export interface AppConfig {
   readonly openMeteoBaseUrl: string;
   readonly nominatimUserAgent: string;
   readonly httpTimeoutMs: number;
+  readonly openMeteoTimezone: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -15,5 +16,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       env.NOMINATIM_USER_AGENT ??
       "tp-gestion-dependances/1.0 (contact: julien.andrade24@gmail.com)",
     httpTimeoutMs: Number(env.HTTP_TIMEOUT_MS ?? 5000),
+    openMeteoTimezone: env.OPEN_METEO_TIMEZONE ?? "auto",
   };
 }
