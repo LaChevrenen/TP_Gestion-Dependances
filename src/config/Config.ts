@@ -1,3 +1,8 @@
+import { ConfigurationError } from "./ConfigurationError.js";
+
+export type GeocoderProviderName = "nominatim" | "ban";
+export type WeatherProviderName = "open-meteo" | "met-norway";
+
 export interface AppConfig {
   readonly port: number;
   readonly nominatimBaseUrl: string;
@@ -8,9 +13,43 @@ export interface AppConfig {
   readonly banBaseUrl: string;
   readonly metNorwayBaseUrl: string;
   readonly metNorwayUserAgent?: string;
+  readonly geocoderProvider: GeocoderProviderName;
+  readonly weatherProvider: WeatherProviderName;
+}
+
+const GEOCODER_PROVIDERS: readonly GeocoderProviderName[] = ["nominatim", "ban"];
+const WEATHER_PROVIDERS: readonly WeatherProviderName[] = ["open-meteo", "met-norway"];
+
+function parseGeocoderProvider(raw: string | undefined): GeocoderProviderName {
+  const value = raw ?? "nominatim";
+  if (!GEOCODER_PROVIDERS.includes(value as GeocoderProviderName)) {
+    throw new ConfigurationError(
+      `Invalid GEOCODER_PROVIDER "${value}". Accepted values: ${GEOCODER_PROVIDERS.join(", ")}.`
+    );
+  }
+  return value as GeocoderProviderName;
+}
+
+function parseWeatherProvider(raw: string | undefined): WeatherProviderName {
+  const value = raw ?? "open-meteo";
+  if (!WEATHER_PROVIDERS.includes(value as WeatherProviderName)) {
+    throw new ConfigurationError(
+      `Invalid WEATHER_PROVIDER "${value}". Accepted values: ${WEATHER_PROVIDERS.join(", ")}.`
+    );
+  }
+  return value as WeatherProviderName;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const weatherProvider = parseWeatherProvider(env.WEATHER_PROVIDER);
+
+  if (weatherProvider === "met-norway" && !env.MET_NORWAY_USER_AGENT) {
+    throw new ConfigurationError(
+      "MET_NORWAY_USER_AGENT is required when WEATHER_PROVIDER=met-norway " +
+        "(MET Norway rejects requests with a generic library User-Agent)."
+    );
+  }
+
   return {
     port: Number(env.PORT ?? 3000),
     nominatimBaseUrl: env.NOMINATIM_BASE_URL ?? "https://nominatim.openstreetmap.org",
@@ -24,5 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     metNorwayBaseUrl: env.MET_NORWAY_BASE_URL ?? "https://api.met.no",
     // Pas de valeur par defaut generique ici : un User-Agent de lib fait 403 chez MET Norway.
     ...(env.MET_NORWAY_USER_AGENT ? { metNorwayUserAgent: env.MET_NORWAY_USER_AGENT } : {}),
+    geocoderProvider: parseGeocoderProvider(env.GEOCODER_PROVIDER),
+    weatherProvider,
   };
 }
