@@ -12,8 +12,11 @@
     "test:contracts": "vitest run tests/contracts",
     "test:e2e": "vitest run tests/e2e",
     "test:smoke": "vitest run tests/smoke",
+    "arch": "depcruise --config .dependency-cruiser.cjs src tests",
+    "arch:graph": "depcruise --config .dependency-cruiser.cjs --exclude node_modules --output-type mermaid src > docs/dependency-graph.mmd",
     "lint": "eslint .",
-    "audit": "npm audit"
+    "audit": "npm audit",
+    "verify": "npm run lint && npm run build && npm run arch && npm test && npm run test:contracts && npm run test:e2e"
   },
   "license": "UNLICENSED",
   "dependencies": {
@@ -26,6 +29,7 @@
     "@types/express": "4.17.21",
     "@types/node": "22.10.10",
     "@types/supertest": "6.0.2",
+    "dependency-cruiser": "18.3.1",
     "eslint": "9.39.5",
     "msw": "2.15.0",
     "supertest": "7.1.3",

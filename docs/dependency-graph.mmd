@@ -1,0 +1,124 @@
+flowchart LR
+
+subgraph 0["src"]
+subgraph 1["application"]
+2["ForecastService.ts"]
+end
+subgraph 3["domain"]
+4["Forecast.ts"]
+5["Location.ts"]
+6["Coordinates.ts"]
+subgraph 7["ports"]
+8["Geocoder.ts"]
+9["WeatherProvider.ts"]
+end
+subgraph I["errors"]
+J["AddressNotFoundError.ts"]
+K["ProviderUnavailableError.ts"]
+end
+end
+A["types.ts"]
+subgraph B["config"]
+C["Config.ts"]
+D["ConfigurationError.ts"]
+end
+E["container.ts"]
+subgraph F["infrastructure"]
+subgraph G["geocoding"]
+H["BanGeocoder.ts"]
+O["BanTypes.ts"]
+P["NominatimGeocoder.ts"]
+Q["NominatimTypes.ts"]
+end
+subgraph L["http"]
+M["HttpClient.ts"]
+N["HttpRequestError.ts"]
+R["FetchHttpClient.ts"]
+end
+subgraph S["weather"]
+T["MetNorwayWeatherProvider.ts"]
+U["MetNorwayTypes.ts"]
+V["OpenMeteoWeatherProvider.ts"]
+W["OpenMeteoTypes.ts"]
+end
+end
+subgraph X["presentation"]
+Y["ForecastController.ts"]
+Z["errorMapping.ts"]
+10["forecastResponse.ts"]
+12["createApp.ts"]
+end
+11["main.ts"]
+end
+2-->4
+2-->8
+2-->9
+2-->A
+4-->5
+5-->6
+8-->6
+9-->6
+9-->4
+C-->D
+E-->2
+E-->C
+E-->C
+E-->8
+E-->9
+E-->H
+E-->P
+E-->R
+E-->M
+E-->T
+E-->V
+E-->Y
+E-->A
+H-->C
+H-->6
+H-->J
+H-->K
+H-->8
+H-->A
+H-->M
+H-->N
+H-->O
+P-->C
+P-->6
+P-->J
+P-->K
+P-->8
+P-->A
+P-->M
+P-->Q
+R-->M
+R-->N
+T-->C
+T-->6
+T-->K
+T-->4
+T-->9
+T-->A
+T-->M
+T-->U
+V-->C
+V-->6
+V-->K
+V-->4
+V-->9
+V-->A
+V-->M
+V-->W
+Y-->2
+Y-->A
+Y-->Z
+Y-->10
+Z-->J
+Z-->K
+10-->4
+11-->C
+11-->D
+11-->E
+11-->12
+11-->Y
+11-->A
+12-->Y

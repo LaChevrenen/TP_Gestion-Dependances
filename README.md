@@ -84,10 +84,14 @@ curl.exe "http://localhost:3000/forecast?address=xyzzy-adresse-inexistante"
 | `npm run build` | Compile TypeScript vers `dist/` |
 | `npm start` | Démarre le serveur compilé (`dist/main.js`) |
 | `npm test` | Tests unitaires (`tests/unit`, aucun accès réseau) |
+| `npm run test:contracts` | Tests de contrat par port (`tests/contracts`, un jeu d'assertions par fournisseur) |
 | `npm run test:e2e` | Tests bout-en-bout (`tests/e2e`, supertest + msw, aucun accès réseau) |
 | `npm run test:smoke` | Test optionnel contre les vraies API (désactivé sauf `RUN_SMOKE_TESTS=1`) |
 | `npm run lint` | ESLint |
+| `npm run arch` | Vérifie les règles de dépendances entre couches (`dependency-cruiser`) |
+| `npm run arch:graph` | Régénère `docs/dependency-graph.mmd` (graphe Mermaid du README) |
 | `npm run audit` | `npm audit` |
+| `npm run verify` | Enchaîne lint + build + arch + tous les tests (hors smoke) |
 
 ## Architecture en couches
 
@@ -97,63 +101,145 @@ dépend de rien (pas d'Express, pas de lib HTTP). `container.ts` est le **seul**
 endroit qui connaît les implémentations concrètes (Nominatim, Open-Meteo, Express,
 fetch).
 
+> Graphe **généré automatiquement** par `dependency-cruiser` (`npm run arch:graph`),
+> à partir du code réel — pas dessiné à la main. Il ne peut donc pas dériver de
+> l'implémentation : s'il change, c'est que le code a changé. Voir la section
+> [Étape 5 — dependency-cruiser](#étape-5--verification-automatique-des-frontières-dependency-cruiser)
+> pour la vérification des règles qui le rendent fiable.
+
 ```mermaid
-graph TD
-  subgraph Domain["domain (aucune dependance externe)"]
-    D1["Coordinates / Location / Forecast"]
-    D2["ports: Geocoder / WeatherProvider"]
-    D3["AddressNotFoundError / ProviderUnavailableError"]
-  end
+flowchart LR
 
-  subgraph Application
-    A1["ForecastService"]
-  end
-
-  subgraph Infrastructure
-    I1["HttpClient (interface) / FetchHttpClient"]
-    I2["NominatimGeocoder"]
-    I3["OpenMeteoWeatherProvider"]
-  end
-
-  subgraph Presentation
-    P1["ForecastController"]
-    P2["createApp (Express)"]
-  end
-
-  subgraph Config
-    C1["AppConfig / loadConfig(env)"]
-  end
-
-  CR["container.ts (composition root)"]
-  M["main.ts"]
-
-  A1 --> D1
-  A1 --> D2
-  P1 --> A1
-  P1 --> D3
-  P2 --> P1
-
-  I2 -. implements .-> D2
-  I3 -. implements .-> D2
-  I2 --> I1
-  I3 --> I1
-  I2 --> C1
-  I3 --> C1
-  I2 --> D3
-  I3 --> D3
-
-  CR --> I1
-  CR --> I2
-  CR --> I3
-  CR --> A1
-  CR --> P1
-  CR --> C1
-  M --> CR
-  M --> P2
-
-  I2 -->|HTTPS| EXT1[("Nominatim API")]
-  I3 -->|HTTPS| EXT2[("Open-Meteo API")]
+subgraph 0["src"]
+subgraph 1["application"]
+2["ForecastService.ts"]
+end
+subgraph 3["domain"]
+4["Forecast.ts"]
+5["Location.ts"]
+6["Coordinates.ts"]
+subgraph 7["ports"]
+8["Geocoder.ts"]
+9["WeatherProvider.ts"]
+end
+subgraph I["errors"]
+J["AddressNotFoundError.ts"]
+K["ProviderUnavailableError.ts"]
+end
+end
+A["types.ts"]
+subgraph B["config"]
+C["Config.ts"]
+D["ConfigurationError.ts"]
+end
+E["container.ts"]
+subgraph F["infrastructure"]
+subgraph G["geocoding"]
+H["BanGeocoder.ts"]
+O["BanTypes.ts"]
+P["NominatimGeocoder.ts"]
+Q["NominatimTypes.ts"]
+end
+subgraph L["http"]
+M["HttpClient.ts"]
+N["HttpRequestError.ts"]
+R["FetchHttpClient.ts"]
+end
+subgraph S["weather"]
+T["MetNorwayWeatherProvider.ts"]
+U["MetNorwayTypes.ts"]
+V["OpenMeteoWeatherProvider.ts"]
+W["OpenMeteoTypes.ts"]
+end
+end
+subgraph X["presentation"]
+Y["ForecastController.ts"]
+Z["errorMapping.ts"]
+10["forecastResponse.ts"]
+12["createApp.ts"]
+end
+11["main.ts"]
+end
+2-->4
+2-->8
+2-->9
+2-->A
+4-->5
+5-->6
+8-->6
+9-->6
+9-->4
+C-->D
+E-->2
+E-->C
+E-->8
+E-->9
+E-->H
+E-->P
+E-->R
+E-->M
+E-->T
+E-->V
+E-->Y
+E-->A
+H-->C
+H-->6
+H-->J
+H-->K
+H-->8
+H-->A
+H-->M
+H-->N
+H-->O
+P-->C
+P-->6
+P-->J
+P-->K
+P-->8
+P-->A
+P-->M
+P-->Q
+R-->M
+R-->N
+T-->C
+T-->6
+T-->K
+T-->4
+T-->9
+T-->A
+T-->M
+T-->U
+V-->C
+V-->6
+V-->K
+V-->4
+V-->9
+V-->A
+V-->M
+V-->W
+Y-->2
+Y-->A
+Y-->Z
+Y-->10
+Z-->J
+Z-->K
+10-->4
+11-->C
+11-->D
+11-->E
+11-->12
+11-->Y
+11-->A
+12-->Y
 ```
+
+On y lit directement les invariants vérifiés par `dependency-cruiser` : `domain/`
+(sous-graphe 3) n'a aucune flèche sortante vers autre chose que lui-même ;
+`application/` (`ForecastService.ts`) ne pointe que vers `domain/` et `types.ts` ;
+`presentation/` ne pointe jamais vers `infrastructure/` ; et `container.ts` (E) est
+le seul nœud hors `infrastructure/` à pointer vers un adapter concret
+(`BanGeocoder`, `NominatimGeocoder`, `MetNorwayWeatherProvider`,
+`OpenMeteoWeatherProvider`, `FetchHttpClient`).
 
 **Ajouter un nouveau fournisseur** (ex. un autre géocodeur) = une nouvelle classe
 `implements Geocoder` dans `infrastructure/`, + une ligne de binding dans
@@ -365,3 +451,42 @@ n'a pas cette limite) aurait été une fuite d'abstraction à l'envers : le doma
 mettrait à connaître un détail d'implémentation d'un adapter particulier. C'est un choix
 assumé, pas un oubli — `ProviderUnavailableError` reste réservé aux vraies pannes
 (timeout, HTTP 5xx, réponse malformée).
+
+### ADR — Série météo vide traitée comme une panne, pas comme une prévision vide
+
+**Contexte** : que faire quand un fournisseur météo répond avec succès (HTTP 200) mais
+une série temporelle structurellement vide (`hourly.time: []`) ?
+
+**Décision** : `ProviderUnavailableError`, pas un `WeatherForecast` avec `hourly: []`.
+Comportement identique pour `OpenMeteoWeatherProvider` et `MetNorwayWeatherProvider`.
+
+**Justification** : pour ce domaine (prévisions horaires sur plusieurs jours, couverture
+mondiale des deux API), une série vide pour des coordonnées valides n'est jamais un état
+métier légitime — elle signale une anomalie (coordonnées hors couverture, dégradation du
+provider). Traiter ce cas comme une erreur plutôt qu'une prévision vide garde un
+invariant simple pour toute la chaîne en aval (`Forecast` réussi ⇒ toujours exploitable)
+et évite une incohérence entre les deux implémentations du port `WeatherProvider`.
+Compromis assumé : si un provider avait un jour une raison légitime de renvoyer "aucune
+donnée pour cette zone" sans panne, cette distinction serait perdue — non rencontré en
+pratique sur ces deux API.
+
+### Étape 5 — vérification automatique des frontières (dependency-cruiser)
+
+Les étapes précédentes vérifiaient l'absence de fuite "à la lecture" (audit manuel,
+tests de contrat). L'étape 5 rend cette garantie **vérifiable automatiquement** :
+`dependency-cruiser` (`.dependency-cruiser.cjs`) analyse le graphe d'imports réel de
+`src/` et `tests/` et échoue si une des règles suivantes est violée :
+
+| Règle | Ce qu'elle empêche |
+|---|---|
+| `domain-purity` | `domain/` important autre chose que `domain/` (même une lib npm) |
+| `application-purity` | `application/` important `infrastructure/`/`presentation/` ou une lib HTTP |
+| `presentation-purity` | `presentation/` important `infrastructure/` directement |
+| `no-concrete-adapter-outside-container` | N'importe quel fichier de `src/` (hors `infrastructure/` et `container.ts`) qui importerait un adapter concret (`NominatimGeocoder`, `BanGeocoder`, `OpenMeteoWeatherProvider`, `MetNorwayWeatherProvider`, `FetchHttpClient`) |
+| `nominatim-dto-private`, `ban-dto-private`, `open-meteo-dto-private`, `met-norway-dto-private` | N'importe quel fichier (y compris les tests de contrat) qui importerait le DTO privé d'un adapter autre que le sien |
+
+`npm run arch` lance la vérification (`src` + `tests`, pour que la règle sur les DTO
+couvre aussi les tests de contrat) ; `npm run arch:graph` régénère le graphe Mermaid
+ci-dessus. Premier passage sur le code existant : **0 violation** — confirmé aussi en
+vérifiant que les règles mordent bien (import volontairement fautif ajouté puis retiré,
+voir historique de commit de cette étape).
