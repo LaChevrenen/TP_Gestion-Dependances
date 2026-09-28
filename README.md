@@ -8,20 +8,19 @@ prévisions de rayonnement solaire horaire (Open-Meteo).
 ```json
 {
   "address": "Alès",
-  "latitude": 44.13,
-  "longitude": 4.08,
-  "timezone": "Europe/Paris",
+  "latitude": 44.1279,
+  "longitude": 4.0817,
   "hourly": [
-    { "time": "2024-01-01T00:00", "shortwaveRadiation": { "value": 0, "unit": "W/m²" } },
-    { "time": "2024-01-01T01:00", "shortwaveRadiation": { "value": 94, "unit": "W/m²" } }
+    { "time": "2025-06-10T14:00:00Z", "temperatureCelsius": 24.3 }
   ]
 }
 ```
 
-> Forme mise à jour au TP2 : `hourly` est une liste de points horodatés, chaque mesure
-> étant optionnelle. Un fournisseur qui ne mesure pas le rayonnement (ex. MET Norway)
-> renvoie simplement des points sans la clé `shortwaveRadiation`, avec d'autres clés
-> à la place (`temperature`, `windSpeed`). Voir la section [TP2](#tp2--changement-dapi).
+> Format **unifié au TP3** : cette structure est identique quel que soit le fournisseur
+> actif (Nominatim/BAN, Open-Meteo/MET Norway) ou le mode démo — seul le contenu change.
+> Le domaine reste plus riche (rayonnement, vent, fuseau, unités) ; seule la projection
+> HTTP ([forecastResponse.ts](src/presentation/forecastResponse.ts)) fixe le contrat public.
+> Voir la section [TP3](#tp3--mode-démo-cache-et-format-unifié).
 
 Ce dépôt est un TP d'architecture logicielle : l'objectif pédagogique est la gestion
 propre des dépendances (ports/adapters, injection de dépendances via IoC, composition
@@ -56,8 +55,8 @@ Le serveur écoute par défaut sur `http://localhost:3000`.
 
 ```bash
 curl "http://localhost:3000/forecast?address=Al%C3%A8s"
-# 200 -> { "address": "Alès", "latitude": 44.12, "longitude": 4.08, "timezone": "Europe/Paris",
-#          "hourly": [ { "time": "...", "shortwaveRadiation": { "value": 0, "unit": "W/m²" } }, ... ] }
+# 200 -> { "address": "Alès", "latitude": 44.1279, "longitude": 4.0817,
+#          "hourly": [ { "time": "2025-06-10T14:00:00Z", "temperatureCelsius": 24.3 }, ... ] }
 
 curl "http://localhost:3000/forecast"
 # 400 -> { "error": "Query parameter 'address' is required and must not be empty" }

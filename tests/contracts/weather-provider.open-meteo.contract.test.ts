@@ -39,8 +39,8 @@ const fixtures: WeatherProviderContractFixtures = {
         lastUserAgent = request.headers.get("User-Agent");
         return HttpResponse.json({
           timezone: "Europe/Paris",
-          hourly: { time: ["2024-01-01T00:00"], shortwave_radiation: [94] },
-          hourly_units: { time: "iso8601", shortwave_radiation: "W/m²" },
+          hourly: { time: [1704067200], temperature_2m: [5.2], shortwave_radiation: [94] },
+          hourly_units: { temperature_2m: "°C", shortwave_radiation: "W/m²" },
         });
       })
     );
@@ -51,8 +51,8 @@ const fixtures: WeatherProviderContractFixtures = {
         lastUserAgent = request.headers.get("User-Agent");
         return HttpResponse.json({
           timezone: "Europe/Paris",
-          hourly: { time: [], shortwave_radiation: [] },
-          hourly_units: { time: "iso8601", shortwave_radiation: "W/m²" },
+          hourly: { time: [], temperature_2m: [], shortwave_radiation: [] },
+          hourly_units: { temperature_2m: "°C", shortwave_radiation: "W/m²" },
         });
       })
     );

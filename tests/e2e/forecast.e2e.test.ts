@@ -12,14 +12,18 @@ const NOMINATIM_BASE_URL = "https://nominatim.e2e-test";
 const OPEN_METEO_BASE_URL = "https://open-meteo.e2e-test";
 const BAN_BASE_URL = "https://ban.e2e-test";
 const MET_NORWAY_BASE_URL = "https://met-norway.e2e-test";
+const MET_NORWAY_USER_AGENT = "TP2-MeteoApi/1.0 e2e@example.com";
 
 const server = setupServer();
-const mockedHostnames = new Set([
-  new URL(NOMINATIM_BASE_URL).hostname,
-  new URL(OPEN_METEO_BASE_URL).hostname,
-  new URL(BAN_BASE_URL).hostname,
-  new URL(MET_NORWAY_BASE_URL).hostname,
-]);
+const mockedHostnames = new Set(
+  [NOMINATIM_BASE_URL, OPEN_METEO_BASE_URL, BAN_BASE_URL, MET_NORWAY_BASE_URL].map(
+    (url) => new URL(url).hostname
+  )
+);
+
+// Nombre d'appels reellement recus par chaque API externe simulee.
+const hits = { nominatim: 0, openMeteo: 0, ban: 0, metNorway: 0 };
+let metNorwayUserAgent: string | null = null;
 
 beforeAll(() =>
   server.listen({
@@ -33,25 +37,23 @@ beforeAll(() =>
     },
   })
 );
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  Object.assign(hits, { nominatim: 0, openMeteo: 0, ban: 0, metNorway: 0 });
+  metNorwayUserAgent = null;
+});
 afterAll(() => server.close());
 
-let app: Express;
 const originalEnv = { ...process.env };
 
-beforeEach(() => {
-  process.env.NOMINATIM_BASE_URL = NOMINATIM_BASE_URL;
-  process.env.OPEN_METEO_BASE_URL = OPEN_METEO_BASE_URL;
-
-  const container = buildContainer();
-  const controller = container.get<ForecastController>(TYPES.ForecastController);
-  app = createApp(controller);
-
-  process.env = { ...originalEnv };
-});
-
-function buildTestApp(envOverrides: Record<string, string>): Express {
-  Object.assign(process.env, envOverrides);
+function buildTestApp(envOverrides: Record<string, string> = {}): Express {
+  Object.assign(process.env, {
+    NOMINATIM_BASE_URL,
+    OPEN_METEO_BASE_URL,
+    BAN_BASE_URL,
+    MET_NORWAY_BASE_URL,
+    ...envOverrides,
+  });
   const container = buildContainer();
   const controller = container.get<ForecastController>(TYPES.ForecastController);
   const testApp = createApp(controller);
@@ -59,31 +61,68 @@ function buildTestApp(envOverrides: Record<string, string>): Express {
   return testApp;
 }
 
+let app: Express;
+beforeEach(() => {
+  app = buildTestApp();
+});
+
 function mockNominatimSuccess(): void {
   server.use(
-    http.get(`${NOMINATIM_BASE_URL}/search`, () =>
-      HttpResponse.json([{ lat: "44.1279", lon: "4.0817" }])
-    )
+    http.get(`${NOMINATIM_BASE_URL}/search`, () => {
+      hits.nominatim += 1;
+      return HttpResponse.json([{ lat: "44.1279", lon: "4.0817" }]);
+    })
+  );
+}
+
+function mockBanSuccess(): void {
+  server.use(
+    http.get(`${BAN_BASE_URL}/search/`, () => {
+      hits.ban += 1;
+      return HttpResponse.json({ features: [{ geometry: { coordinates: [4.0817, 44.1279] } }] });
+    })
   );
 }
 
 function mockOpenMeteoSuccess(): void {
   server.use(
-    http.get(`${OPEN_METEO_BASE_URL}/v1/forecast`, () =>
-      HttpResponse.json({
+    http.get(`${OPEN_METEO_BASE_URL}/v1/forecast`, () => {
+      hits.openMeteo += 1;
+      return HttpResponse.json({
         timezone: "Europe/Paris",
-        hourly: {
-          time: ["2024-01-01T00:00"],
-          shortwave_radiation: [0],
-        },
-        hourly_units: {
-          time: "iso8601",
-          shortwave_radiation: "W/m²",
-        },
-      })
-    )
+        hourly: { time: [1704067200], temperature_2m: [5.2], shortwave_radiation: [0] },
+        hourly_units: { temperature_2m: "°C", shortwave_radiation: "W/m²" },
+      });
+    })
   );
 }
+
+function mockMetNorwaySuccess(): void {
+  server.use(
+    http.get(`${MET_NORWAY_BASE_URL}/weatherapi/locationforecast/2.0/compact`, ({ request }) => {
+      hits.metNorway += 1;
+      metNorwayUserAgent = request.headers.get("User-Agent");
+      return HttpResponse.json({
+        properties: {
+          meta: { units: { air_temperature: "celsius", wind_speed: "m/s" } },
+          timeseries: [
+            {
+              time: "2024-01-01T00:00:00Z",
+              data: { instant: { details: { air_temperature: 5.2, wind_speed: 3.1 } } },
+            },
+          ],
+        },
+      });
+    })
+  );
+}
+
+const EXPECTED_BODY = {
+  address: "Ales",
+  latitude: 44.1279,
+  longitude: 4.0817,
+  hourly: [{ time: "2024-01-01T00:00:00Z", temperatureCelsius: 5.2 }],
+};
 
 describe("GET /forecast (e2e)", () => {
   it("200 - renvoie la prevision pour une adresse valide", async () => {
@@ -93,67 +132,23 @@ describe("GET /forecast (e2e)", () => {
     const response = await request(app).get("/forecast").query({ address: "Ales" });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      address: "Ales",
-      latitude: 44.1279,
-      longitude: 4.0817,
-      timezone: "Europe/Paris",
-      hourly: [{ time: "2024-01-01T00:00", shortwaveRadiation: { value: 0, unit: "W/m²" } }],
-    });
+    expect(response.body).toEqual(EXPECTED_BODY);
   });
 
   it("200 - fonctionne avec GEOCODER_PROVIDER=ban et WEATHER_PROVIDER=met-norway", async () => {
-    let capturedMetNorwayUserAgent: string | null = null;
-
-    server.use(
-      http.get(`${BAN_BASE_URL}/search/`, () =>
-        HttpResponse.json({
-          features: [{ geometry: { coordinates: [4.0817, 44.1279] } }],
-        })
-      )
-    );
-    server.use(
-      http.get(`${MET_NORWAY_BASE_URL}/weatherapi/locationforecast/2.0/compact`, ({ request }) => {
-        capturedMetNorwayUserAgent = request.headers.get("User-Agent");
-        return HttpResponse.json({
-          properties: {
-            meta: { units: { air_temperature: "celsius", wind_speed: "m/s" } },
-            timeseries: [
-              {
-                time: "2024-01-01T00:00:00Z",
-                data: { instant: { details: { air_temperature: 5.2, wind_speed: 3.1 } } },
-              },
-            ],
-          },
-        });
-      })
-    );
-
+    mockBanSuccess();
+    mockMetNorwaySuccess();
     const testApp = buildTestApp({
       GEOCODER_PROVIDER: "ban",
       WEATHER_PROVIDER: "met-norway",
-      BAN_BASE_URL,
-      MET_NORWAY_BASE_URL,
-      MET_NORWAY_USER_AGENT: "TP2-MeteoApi/1.0 e2e@example.com",
+      MET_NORWAY_USER_AGENT,
     });
 
     const response = await request(testApp).get("/forecast").query({ address: "Ales" });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      address: "Ales",
-      latitude: 44.1279,
-      longitude: 4.0817,
-      timezone: "UTC",
-      hourly: [
-        {
-          time: "2024-01-01T00:00:00Z",
-          temperature: { value: 5.2, unit: "celsius" },
-          windSpeed: { value: 3.1, unit: "m/s" },
-        },
-      ],
-    });
-    expect(capturedMetNorwayUserAgent).toBe("TP2-MeteoApi/1.0 e2e@example.com");
+    expect(response.body).toEqual(EXPECTED_BODY);
+    expect(metNorwayUserAgent).toBe(MET_NORWAY_USER_AGENT);
   });
 
   it("400 - address absente", async () => {
@@ -201,5 +196,30 @@ describe("GET /forecast (e2e)", () => {
 
     expect(response.status).toBe(502);
     expect(response.body).toHaveProperty("error");
+  });
+});
+
+describe("Format de sortie unifie (TP3)", () => {
+  const mockGeocoder = { nominatim: mockNominatimSuccess, ban: mockBanSuccess };
+  const mockWeather = { "open-meteo": mockOpenMeteoSuccess, "met-norway": mockMetNorwaySuccess };
+
+  it.each([
+    ["nominatim", "open-meteo"],
+    ["nominatim", "met-norway"],
+    ["ban", "open-meteo"],
+    ["ban", "met-norway"],
+  ] as const)("meme reponse avec GEOCODER=%s et WEATHER=%s", async (geocoder, weather) => {
+    mockGeocoder[geocoder]();
+    mockWeather[weather]();
+    const testApp = buildTestApp({
+      GEOCODER_PROVIDER: geocoder,
+      WEATHER_PROVIDER: weather,
+      MET_NORWAY_USER_AGENT,
+    });
+
+    const response = await request(testApp).get("/forecast").query({ address: "Ales" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(EXPECTED_BODY);
   });
 });

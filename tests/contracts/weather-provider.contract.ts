@@ -44,8 +44,13 @@ export function runWeatherProviderContract(
       expect(Array.isArray(forecast.hourly)).toBe(true);
       expect(forecast.hourly.length).toBeGreaterThan(0);
 
+      // Garanties requises par le format de sortie unifie (TP3).
+      for (const { time } of forecast.hourly) {
+        expect(time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      }
+      expect(forecast.hourly.some(({ temperature }) => temperature !== undefined)).toBe(true);
+
       const [point] = forecast.hourly;
-      expect(typeof point?.time).toBe("string");
 
       const measurements = [point?.temperature, point?.shortwaveRadiation, point?.windSpeed].filter(
         (measurement): measurement is WeatherMeasurement => measurement !== undefined
