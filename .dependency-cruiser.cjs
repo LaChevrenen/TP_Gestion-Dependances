@@ -64,8 +64,31 @@ module.exports = {
           "^src/infrastructure/weather/OpenMeteoWeatherProvider\\.ts$",
           "^src/infrastructure/weather/MetNorwayWeatherProvider\\.ts$",
           "^src/infrastructure/http/FetchHttpClient\\.ts$",
+          "^src/infrastructure/cache/CachingGeocoder\\.ts$",
+          "^src/infrastructure/cache/InMemoryCache\\.ts$",
+          "^src/infrastructure/demo/DemoGeocoder\\.ts$",
+          "^src/infrastructure/demo/DemoWeatherProvider\\.ts$",
         ],
       },
+    },
+    {
+      name: "demo-adapters-no-network",
+      severity: "error",
+      comment:
+        "Les adapters de demo ne peuvent dependre que de domain/ : ni HttpClient, ni config, " +
+        "ni lib npm. C'est ce qui garantit structurellement que le mode demo n'appelle " +
+        "jamais un service externe.",
+      from: { path: "^src/infrastructure/demo" },
+      to: { pathNot: "^src/domain" },
+    },
+    {
+      name: "cache-decorator-adapter-agnostic",
+      severity: "error",
+      comment:
+        "Le decorateur de cache ne doit connaitre que les ports (Geocoder, Cache), jamais un " +
+        "adapter concret ou HttpClient : le geocodeur enveloppe lui est injecte par le container.",
+      from: { path: "^src/infrastructure/cache" },
+      to: { path: "^src/infrastructure/(geocoding|weather|http|demo)" },
     },
     {
       name: "nominatim-dto-private",
