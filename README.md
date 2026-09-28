@@ -710,3 +710,29 @@ $ npm run verify
 ```
 
 Lint, build, arch, et 54 tests (28 + 19 + 7) passent sur l'état final du TP2.
+
+## TP3 — Mode démo, cache et format unifié
+
+Travail réalisé sur la branche `tp3`, à partir du tag `tp2` (état final du TP2) :
+`git diff tp2..tp3` donne la différence exacte. Commits préfixés `TP3:`.
+
+**Objectif** : trois ajouts transverses, à faire *en ajoutant du code aux abstractions
+existantes* — le coût du changement reste la mesure principale.
+
+1. **Mode démo** : `GET /forecast?address=Alès&demo=true` renvoie des données simulées
+   et n'appelle jamais un service externe (ni géocodage, ni météo).
+2. **Cache du géocodage** : deux appels sur la même adresse ne déclenchent qu'un seul
+   appel réseau réel ; pas de `static`, et la solution de cache doit pouvoir évoluer.
+3. **Format de sortie unifié** : quel que soit le fournisseur ou le mode démo, la réponse
+   est exactement `{ address, latitude, longitude, hourly: [{ time, temperatureCelsius }] }`.
+
+**Constat de départ** : la réponse HTTP du TP2 recopiait `hourly` tel quel — sa forme
+changeait donc selon le fournisseur (`shortwaveRadiation` pour Open-Meteo, `temperature`
+et `windSpeed` pour MET Norway). Le TP3 corrige cela à un seul endroit (la projection HTTP).
+
+**Plan** :
+1. Format unifié (projection HTTP, heures ISO UTC, température Open-Meteo).
+2. Mode démo : adapters de démonstration + aiguillage par requête.
+3. Cache du géocodage : décorateur `CachingGeocoder` + port `Cache` asynchrone.
+4. Règles `dependency-cruiser` pour les nouveaux composants.
+5. Bilan chiffré (`git diff --stat tp2..HEAD`).
