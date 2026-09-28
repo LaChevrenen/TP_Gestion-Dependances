@@ -5,8 +5,12 @@ import { TYPES } from "./types.js";
 import { ForecastService } from "./application/ForecastService.js";
 import type { AppConfig, GeocoderProviderName, WeatherProviderName } from "./config/Config.js";
 import { loadConfig } from "./config/Config.js";
+import type { Coordinates } from "./domain/Coordinates.js";
 import type { Geocoder } from "./domain/ports/Geocoder.js";
 import type { WeatherProvider } from "./domain/ports/WeatherProvider.js";
+import type { Cache } from "./infrastructure/cache/Cache.js";
+import { CachingGeocoder } from "./infrastructure/cache/CachingGeocoder.js";
+import { InMemoryCache } from "./infrastructure/cache/InMemoryCache.js";
 import { BanGeocoder } from "./infrastructure/geocoding/BanGeocoder.js";
 import { NominatimGeocoder } from "./infrastructure/geocoding/NominatimGeocoder.js";
 import type { HttpClient } from "./infrastructure/http/HttpClient.js";
@@ -35,7 +39,17 @@ export function buildContainer(): Container {
 
   container.bind<AppConfig>(TYPES.Config).toConstantValue(config);
   container.bind<HttpClient>(TYPES.HttpClient).to(FetchHttpClient);
-  container.bind<Geocoder>(TYPES.Geocoder).to(geocoderImplementations[config.geocoderProvider]);
+  container
+    .bind<Geocoder>(TYPES.GeocoderDelegate)
+    .to(geocoderImplementations[config.geocoderProvider]);
+  container.bind<Cache<Coordinates>>(TYPES.GeocodeCache).toConstantValue(
+    new InMemoryCache<Coordinates>({
+      ttlMs: config.geocodeCacheTtlMs,
+      maxEntries: config.geocodeCacheMaxEntries,
+      now: Date.now,
+    })
+  );
+  container.bind<Geocoder>(TYPES.Geocoder).to(CachingGeocoder);
   container
     .bind<WeatherProvider>(TYPES.WeatherProvider)
     .to(weatherProviderImplementations[config.weatherProvider]);

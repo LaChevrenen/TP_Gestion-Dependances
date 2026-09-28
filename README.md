@@ -244,8 +244,8 @@ le seul nœud hors `infrastructure/` à pointer vers un adapter concret
 `implements Geocoder` dans `infrastructure/`, + une ligne de binding dans
 `container.ts`. Zéro modification de `domain/` ou `application/`.
 
-**Point d'extension documenté (non implémenté)** : pas de cache, retry ou circuit
-breaker (hors scope, sur-ingénierie pour ce TP). Le point d'extension naturel est un
+**Point d'extension** (cache : *implémenté au TP3*, voir plus bas ; retry et circuit
+breaker : toujours hors scope, sur-ingénierie pour ce TP). Le point d'extension naturel est un
 **décorateur de `Geocoder`** (ex. `CachingGeocoder implements Geocoder` qui enveloppe
 `NominatimGeocoder` et court-circuite les adresses déjà résolues) branché d'une seule
 ligne dans `container.ts` — cohérent avec le rate limit Nominatim (~1 req/s).
@@ -757,3 +757,25 @@ mêmes classes qu'en réel) — et `DemoAwareForecastController` aiguille selon 
   (état caché, exactement le type de dépendance implicite vu en cours).
 
 Le démo renvoie des données **déterministes** (dates fixes, pas d'horloge système).
+
+### Cache du géocodage (étape 3)
+
+`CachingGeocoder` est un **Decorator** du port `Geocoder` : il enveloppe le géocodeur actif
+(Nominatim *ou* BAN, choisi comme au TP2) et ne le sollicite qu'en cas de *miss*.
+Ajouté au container en 3 lignes ; `ForecastService`, les ports et les adapters sont intacts.
+
+- **Évolutif** : il dépend du port `Cache<V>` (`get`/`set` **asynchrones** dès le départ), donc
+  passer à Redis = une nouvelle classe + une ligne dans `container.ts`, sans toucher au décorateur.
+  Implémentation actuelle : `InMemoryCache` (TTL + nombre max d'entrées, éviction de la plus
+  ancienne). Réglages : `GEOCODE_CACHE_TTL_MS`, `GEOCODE_CACHE_MAX_ENTRIES`.
+- **Pas de `static`** : l'état vit dans l'instance, liée en singleton par le container. L'horloge
+  est **injectée** (`now`), donc le TTL se teste sans attendre (l'heure système est une
+  dépendance cachée).
+- **Politique** : seuls les *succès* sont mis en cache (jamais une panne ni un « introuvable »).
+  Clé normalisée (espaces, casse), sans suppression des accents (« Alès » ≠ « Ales »).
+- **Justification réelle** : la politique d'usage de Nominatim demande de mettre les résultats en
+  cache et limite à ~1 req/s — c'est la mitigation du SPOF annoncée dans la section dédiée.
+- **Limite connue** : pas de déduplication des requêtes *concurrentes* (deux requêtes simultanées
+  sur une adresse encore inconnue font deux appels). Le sujet ne demande que des appels *successifs*.
+- **Vérifié par** : test unitaire avec un fake compteur d'appels, le **même contrat `Geocoder`**
+  que les adapters (`runGeocoderContract`), et un e2e comptant les hits sur l'API simulée.

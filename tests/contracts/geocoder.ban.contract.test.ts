@@ -27,6 +27,8 @@ const config: AppConfig = {
   metNorwayBaseUrl: "https://met-norway.unused",
   geocoderProvider: "ban",
   weatherProvider: "open-meteo",
+  geocodeCacheTtlMs: 60_000,
+  geocodeCacheMaxEntries: 100,
 };
 
 function buildGeocoder(): BanGeocoder {

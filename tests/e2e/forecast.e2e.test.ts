@@ -256,3 +256,34 @@ describe("Mode demo (TP3)", () => {
     expect(hits).toMatchObject({ nominatim: 1, openMeteo: 1 });
   });
 });
+
+describe("Cache du geocodage (TP3)", () => {
+  it.each([
+    ["nominatim", "nominatim", mockNominatimSuccess],
+    ["ban", "ban", mockBanSuccess],
+  ] as const)(
+    "%s : deux requetes sur la meme adresse => un seul appel geocodeur, deux appels meteo",
+    async (geocoder, hitKey, mockGeocoder) => {
+      mockGeocoder();
+      mockOpenMeteoSuccess();
+      const testApp = buildTestApp({ GEOCODER_PROVIDER: geocoder });
+
+      const first = await request(testApp).get("/forecast").query({ address: "Ales" });
+      const second = await request(testApp).get("/forecast").query({ address: "  ales " });
+
+      expect(second.body).toEqual({ ...first.body, address: "  ales " });
+      expect(hits[hitKey]).toBe(1);
+      expect(hits.openMeteo).toBe(2);
+    }
+  );
+
+  it("une adresse differente declenche un nouvel appel geocodeur", async () => {
+    mockNominatimSuccess();
+    mockOpenMeteoSuccess();
+
+    await request(app).get("/forecast").query({ address: "Ales" });
+    await request(app).get("/forecast").query({ address: "Lyon" });
+
+    expect(hits.nominatim).toBe(2);
+  });
+});

@@ -28,6 +28,8 @@ const config: AppConfig = {
   metNorwayBaseUrl: "https://met-norway.unused",
   geocoderProvider: "nominatim",
   weatherProvider: "open-meteo",
+  geocodeCacheTtlMs: 60_000,
+  geocodeCacheMaxEntries: 100,
 };
 
 let lastUserAgent: string | null | undefined;

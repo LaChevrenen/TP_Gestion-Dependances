@@ -5,6 +5,8 @@ import type { AppConfig } from "../../src/config/Config.js";
 import type { Coordinates } from "../../src/domain/Coordinates.js";
 import { NominatimGeocoder } from "../../src/infrastructure/geocoding/NominatimGeocoder.js";
 import { FetchHttpClient } from "../../src/infrastructure/http/FetchHttpClient.js";
+import { InMemoryCache } from "../../src/infrastructure/cache/InMemoryCache.js";
+import { CachingGeocoder } from "../../src/infrastructure/cache/CachingGeocoder.js";
 import { runGeocoderContract, type GeocoderContractFixtures } from "./geocoder.contract.js";
 
 const BASE_URL = "https://nominatim.contract-test";
@@ -26,6 +28,8 @@ const config: AppConfig = {
   metNorwayBaseUrl: "https://met-norway.unused",
   geocoderProvider: "nominatim",
   weatherProvider: "open-meteo",
+  geocodeCacheTtlMs: 60_000,
+  geocodeCacheMaxEntries: 100,
 };
 
 let lastSentQuery: string | undefined;
@@ -53,3 +57,13 @@ const fixtures: GeocoderContractFixtures = {
 };
 
 runGeocoderContract("Nominatim", () => new NominatimGeocoder(new FetchHttpClient(), config), fixtures);
+
+runGeocoderContract(
+  "Nominatim (via CachingGeocoder)",
+  () =>
+    new CachingGeocoder(
+      new NominatimGeocoder(new FetchHttpClient(), config),
+      new InMemoryCache({ ttlMs: 60_000, maxEntries: 100, now: Date.now })
+    ),
+  fixtures
+);

@@ -30,6 +30,8 @@ const config: AppConfig = {
   metNorwayUserAgent: "TP2-MeteoApi/1.0 contract-tests@example.com",
   geocoderProvider: "nominatim",
   weatherProvider: "met-norway",
+  geocodeCacheTtlMs: 60_000,
+  geocodeCacheMaxEntries: 100,
 };
 
 let lastUserAgent: string | null | undefined;

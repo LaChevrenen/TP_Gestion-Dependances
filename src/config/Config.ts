@@ -16,6 +16,8 @@ export interface AppConfig {
   readonly metNorwayUserAgent?: string;
   readonly geocoderProvider: GeocoderProviderName;
   readonly weatherProvider: WeatherProviderName;
+  readonly geocodeCacheTtlMs: number;
+  readonly geocodeCacheMaxEntries: number;
 }
 
 const GEOCODER_PROVIDERS: readonly GeocoderProviderName[] = ["nominatim", "ban"];
@@ -69,5 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ...(env.MET_NORWAY_USER_AGENT ? { metNorwayUserAgent: env.MET_NORWAY_USER_AGENT } : {}),
     geocoderProvider: parseGeocoderProvider(env.GEOCODER_PROVIDER),
     weatherProvider,
+    geocodeCacheTtlMs: Number(env.GEOCODE_CACHE_TTL_MS ?? 3_600_000),
+    geocodeCacheMaxEntries: Number(env.GEOCODE_CACHE_MAX_ENTRIES ?? 1000),
   };
 }

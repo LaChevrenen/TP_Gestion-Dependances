@@ -27,6 +27,8 @@ const config: AppConfig = {
   metNorwayBaseUrl: "https://met-norway.test",
   geocoderProvider: "nominatim",
   weatherProvider: "open-meteo",
+  geocodeCacheTtlMs: 60_000,
+  geocodeCacheMaxEntries: 100,
 };
 
 function buildProvider(overrides: Partial<AppConfig> = {}): OpenMeteoWeatherProvider {
