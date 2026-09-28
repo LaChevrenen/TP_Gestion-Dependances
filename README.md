@@ -293,7 +293,7 @@ ligne dans `container.ts` — cohérent avec le rate limit Nominatim (~1 req/s).
 | **API Open-Meteo** (`api.open-meteo.com`) | Externe (service) | Directe (`OpenMeteoWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen — isolé derrière un adapter, mais bloquant en aval si sélectionné | Moyen — gratuit, sans SLA formel, mais historiquement permissif |
 | **API BAN** (`api-adresse.data.gouv.fr`) *(TP2)* | Externe (service public français) | Directe (`BanGeocoder`) | Explicite dans le code, implicite dans son contrat | Fort si sélectionné — même position en tête de chaîne que Nominatim | **Fort si sélectionné** — en plus : **souveraineté** (couverture France uniquement ; inutilisable tel quel pour géocoder une adresse hors de France, contrairement à Nominatim qui est mondial) |
 | **API MET Norway** (`api.met.no`) *(TP2)* | Externe (service public norvégien) | Directe (`MetNorwayWeatherProvider`) | Explicite dans le code, implicite dans son contrat | Moyen si sélectionné — isolé derrière un adapter | Moyen/Fort — **User-Agent obligatoire non générique** (403 sinon, contrôlé au démarrage par `ConfigurationError`), conditions d'usage et quotas propres à MET Norway (service d'un institut météorologique national, pas un fournisseur commercial avec SLA) |
-| Variables d'environnement (`PORT`, `*_BASE_URL`, `NOMINATIM_USER_AGENT`, `OPEN_METEO_USER_AGENT`, `HTTP_TIMEOUT_MS`, `OPEN_METEO_TIMEZONE`, `GEOCODER_PROVIDER`, `WEATHER_PROVIDER`, `MET_NORWAY_USER_AGENT`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence, sauf `MET_NORWAY_USER_AGENT` validé au démarrage si `met-norway` selectionné) | Faible (valeurs par défaut sûres pour tout sauf le choix de fournisseur) | Faible — documenté dans `.env.example`, validation explicite (`ConfigurationError`) |
+| Variables d'environnement (`PORT`, `*_BASE_URL`, `NOMINATIM_USER_AGENT`, `OPEN_METEO_USER_AGENT`, `HTTP_TIMEOUT_MS`, `OPEN_METEO_TIMEZONE`, `GEOCODER_PROVIDER`, `WEATHER_PROVIDER`, `MET_NORWAY_USER_AGENT`, `GEOCODE_CACHE_TTL_MS`, `GEOCODE_CACHE_MAX_ENTRIES`) | Interne au process | Directe (lues uniquement dans `config/Config.ts`) | **Implicite** (rien ne force leur présence, sauf `MET_NORWAY_USER_AGENT` validé au démarrage si `met-norway` selectionné) | Faible (valeurs par défaut sûres pour tout sauf le choix de fournisseur) | Faible — documenté dans `.env.example`, validation explicite (`ConfigurationError`) |
 | User-Agent Nominatim / MET Norway | — (politique d'usage externe) | Directe | **Implicite** (pas une erreur HTTP formelle, juste une politique d'usage) | Faible techniquement, **fort en pratique** | Moyen — un User-Agent absent/générique peut faire bannir l'IP (Nominatim) ou renvoyer 403 (MET Norway) silencieusement pour le premier ; contrôlé au démarrage pour le second |
 | Format des réponses JSON externes (Nominatim, Open-Meteo, BAN, MET Norway) | — (contrat non versionné) | Directe | **Implicite** (pas de schéma/OpenAPI garanti) | Fort — tout le mapping anti-corruption en dépend | Moyen — mitigé : réponse malformée → `ProviderUnavailableError` (502) plutôt qu'un crash |
 | Rate limit Nominatim (~1 req/s, usage policy) | — | Directe (appelée à chaque requête entrante) | **Implicite** (non enforced côté code) | Fort si trafic élevé | Fort — cf. SPOF |
@@ -311,7 +311,7 @@ peut se traduire par un bannissement d'IP silencieux en cas de non-respect.
 
 **Stratégie envisagée (non implémentée, hors scope du TP)** :
 - Isoler ce risque derrière le point d'extension déjà prévu (décorateur `Geocoder`) :
-  un `CachingGeocoder` réduirait la pression sur Nominatim pour les adresses
+  un `CachingGeocoder` (implémenté au TP3) réduit la pression sur Nominatim pour les adresses
   répétées, et un futur `RetryingGeocoder`/`FallbackGeocoder` (ex. bascule vers un
   second fournisseur de géocodage) absorberait les indisponibilités ponctuelles.
 - Le `HttpTimeoutMs` configurable évite déjà qu'une requête bloquée ne bloque
@@ -815,3 +815,119 @@ en ajoutant une fausse violation, puis retirée) :
 | `demo-adapters-no-network` | `infrastructure/demo/` ne dépend que de `domain/` : le mode démo *ne peut pas* appeler le réseau |
 | `cache-decorator-adapter-agnostic` | `infrastructure/cache/` n'importe aucun adapter concret ni `HttpClient` : le géocodeur enveloppé est injecté |
 | `no-concrete-adapter-outside-container` *(étendue)* | `CachingGeocoder`, `InMemoryCache`, `DemoGeocoder`, `DemoWeatherProvider` ne sont importés que par `container.ts` |
+
+## TP3 — Bilan
+
+Comparaison factuelle entre l'état final du TP2 (tag `tp2`) et la branche `tp3` :
+`git diff --stat tp2..tp3`. **Trois fonctionnalités** (démo, cache, format unifié) pour
+**+194 / −23 lignes de code de production** (`src/`, 15 fichiers) ; hors README, le diff
+complet (tests et outillage compris) est de 28 fichiers, +750 / −281.
+
+### Comptage (hors `tests/`, `README.md`, outillage `.dependency-cruiser.cjs` / `docs/`)
+
+| | Nombre | Fichiers |
+|---|---|---|
+| **Ajoutés** | 7 | `Cache.ts`, `InMemoryCache.ts`, `CachingGeocoder.ts`, `DemoGeocoder.ts`, `DemoWeatherProvider.ts`, `DemoAwareForecastController.ts`, `ForecastHandler.ts` |
+| **Modifiés** | 9 | voir tableau ci-dessous |
+| **Supprimés** | 0 | — |
+| **Intacts** | 20 / 28 (71 %) | fichiers `src/` du TP2 sans aucun diff (liste ci-dessous) |
+
+`src/` passe de 28 à 35 fichiers (28 préexistants + 7 nouveaux).
+
+### Fichiers modifiés, avec la raison
+
+| Fichier | +/- | Nature | Raison |
+|---|---|---|---|
+| `presentation/forecastResponse.ts` | +14/−5 | **format** | Projection HTTP unique : `time` + `temperatureCelsius`, unité contrôlée |
+| `infrastructure/weather/OpenMeteoWeatherProvider.ts` | +23/−7 | **format** | Demande `temperature_2m` et `timeformat=unixtime` → heures ISO UTC |
+| `infrastructure/weather/OpenMeteoTypes.ts` | +4/−3 | **format** | DTO privé de l'adapter précédent (température, heures en secondes) |
+| `container.ts` | +27/−2 | câblage | Graphe démo, décorateur de cache, aiguillage |
+| `types.ts` | +4/−0 | câblage | 4 nouveaux tokens d'injection |
+| `config/Config.ts` | +4/−0 | câblage | `GEOCODE_CACHE_TTL_MS`, `GEOCODE_CACHE_MAX_ENTRIES` |
+| `.env.example` | +5/−0 | câblage | Documente ces deux variables |
+| `presentation/createApp.ts` | +3/−3 | typage | Reçoit l'interface `ForecastHandler` au lieu de la classe concrète |
+| `main.ts` | +3/−3 | typage | Idem (type de la variable) |
+
+Sur les 9 : **3 pour le format** (la seule exigence qui n'est pas purement additive),
+**4 de câblage** (composition root, config), **2 de simple typage**. La démo et le cache
+n'ont modifié aucune logique existante.
+
+### Fichiers INTACTS (0 diff, vérifié fichier par fichier avec `git diff tp2..HEAD`)
+
+```
+src/application/ForecastService.ts            src/infrastructure/geocoding/BanGeocoder.ts
+src/domain/Coordinates.ts                     src/infrastructure/geocoding/BanTypes.ts
+src/domain/Forecast.ts                        src/infrastructure/geocoding/NominatimGeocoder.ts
+src/domain/Location.ts                        src/infrastructure/geocoding/NominatimTypes.ts
+src/domain/errors/AddressNotFoundError.ts     src/infrastructure/http/FetchHttpClient.ts
+src/domain/errors/ProviderUnavailableError.ts src/infrastructure/http/HttpClient.ts
+src/domain/ports/Geocoder.ts                  src/infrastructure/http/HttpRequestError.ts
+src/domain/ports/WeatherProvider.ts           src/infrastructure/weather/MetNorwayTypes.ts
+src/presentation/ForecastController.ts        src/infrastructure/weather/MetNorwayWeatherProvider.ts
+src/presentation/errorMapping.ts              src/config/ConfigurationError.ts
+```
+
+Le **domaine entier**, les **deux ports**, `ForecastService` et `ForecastController` n'ont pas
+bougé : la démo réutilise les *mêmes classes* `ForecastService` et `ForecastController` (deuxième
+instance, autres dépendances), et le cache est un décorateur de `Geocoder`.
+
+### Estimation annoncée vs réel
+
+| Annoncé avant de coder | Réel |
+|---|---|
+| ~8 fichiers modifiés | **9** — écart : `OpenMeteoTypes.ts` (le DTO privé de l'adapter modifié : conséquence naturelle que j'aurais dû lister) |
+| ~7 fichiers ajoutés | **7** |
+| Intacts : domaine, `ForecastService`, `ForecastController`, `errorMapping`, adapters Nominatim/BAN/MET Norway | **Confirmé** pour tous |
+
+### Tests : combien ont dû changer ?
+
+- **Cassés par la démo et le cache : 0.** Aucun test existant n'a échoué à cause de ces deux ajouts.
+- **Adaptés à cause du format unifié : 4 fichiers** (`OpenMeteoWeatherProvider.test`, fixtures du
+  contrat Open-Meteo, `forecast.e2e.test`, `realApis.smoke.test`) — ils assertaient l'ancienne
+  forme de réponse ou les anciens formats de l'API Open-Meteo. Le test unitaire Open-Meteo et le
+  fichier e2e ont été **réécrits en profondeur** (fixtures en secondes Unix + température ; mocks
+  partagés avec compteurs d'appels) : c'est le vrai coût du changement de format.
+- **Intacts** : `ForecastService.test`, `container.test`, `NominatimGeocoder.test`, `FetchHttpClient.test`.
+- **Ajoutés** : `demo.test`, `cache.test`, un 2ᵉ appel du contrat `Geocoder` (via le décorateur),
+  et des cas e2e (format unifié sur les 4 combinaisons de fournisseurs, démo sans réseau, cache).
+
+### Critères du sujet → preuves
+
+| Exigence | Preuve automatisée |
+|---|---|
+| Même forme de réponse quel que soit le fournisseur / la démo | e2e « Format de sortie unifié » : 4 combinaisons `toEqual` ; démo : mêmes clés |
+| Démo : aucun appel externe | e2e sans aucun mock (un appel ferait échouer) + compteurs à 0 ; règle `demo-adapters-no-network` |
+| Cache : un seul appel réseau pour deux appels successifs | unitaire (fake compteur), contrat `Geocoder`, e2e (hits Nominatim/BAN = 1) |
+| Pas de `static`, cache remplaçable | test « deux instances ne partagent aucun état » ; port `Cache` asynchrone |
+| Aucune fuite de DTO | `npm run arch` : 0 violation |
+
+### Ce que le TP3 révèle sur l'architecture
+
+1. **Un domaine riche relié tel quel à HTTP fabrique un contrat public instable.** Au TP2, la
+   réponse recopiait `hourly` : changer de fournisseur changeait la *forme* de l'API. Le TP2 avait
+   corrigé la fuite *vers le domaine*, pas celle *vers le client*. Le TP3 exige une projection
+   explicite, à un seul endroit (`forecastResponse.ts`), indépendante du fournisseur.
+2. **Le cycle de vie compte autant que le couplage.** Le mode démo est *par requête* alors que
+   nos services sont des singletons : brancher un service « démo » dans le singleton l'aurait
+   rendu captif du premier mode vu. Deux graphes immuables + un aiguillage par requête évitent le piège.
+3. **Une extension annoncée au TP1 se paie au TP3.** Le point d'extension `Geocoder` documenté
+   dès le TP1 a rendu le cache trivial (3 fichiers + 3 lignes de câblage) ; la promesse du TP1
+   n'était pas de la décoration.
+
+### Limites assumées
+
+- Cache : pas de déduplication des requêtes *concurrentes* ; seuls les succès sont mis en cache.
+- Un point météo sans température est **écarté** de la réponse (le contrat impose un nombre) ;
+  une unité inconnue lève une erreur (502 générique) plutôt que d'être présentée comme des °C.
+- `OPEN_METEO_TIMEZONE` n'influence plus les heures (UTC via `timeformat=unixtime`), seulement
+  le champ `timezone` du domaine, désormais non exposé : reliquat volontairement laissé en place
+  pour ne pas élargir le diff.
+- Le démo renvoie des coordonnées fixes (Alès) quelle que soit l'adresse.
+
+### État final vérifié
+
+```
+$ npm run verify      # lint + build + arch + tests
+✔ no dependency violations found (59 modules, 212 dependencies cruised)
+Tests unitaires : 43 passés   Tests de contrat : 23 passés   Tests e2e : 17 passés
+```
