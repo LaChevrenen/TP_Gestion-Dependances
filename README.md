@@ -735,3 +735,25 @@ et `windSpeed` pour MET Norway). Le TP3 corrige cela à un seul endroit (la proj
 3. Cache du géocodage : décorateur `CachingGeocoder` + port `Cache` asynchrone.
 4. Règles `dependency-cruiser` pour les nouveaux composants.
 5. Bilan chiffré (`git diff --stat tp2..HEAD`).
+
+### Mode démo (étape 2)
+
+`demo=true` est une **Strategy choisie par requête** : le container construit deux
+graphes singleton immuables — le graphe réel (inchangé) et un graphe démo
+(`DemoGeocoder` + `DemoWeatherProvider` → un second `ForecastService`/`ForecastController`,
+mêmes classes qu'en réel) — et `DemoAwareForecastController` aiguille selon la requête
+(valeur exacte `"true"` ; tout autre valeur = mode réel).
+
+**Pourquoi deux graphes plutôt qu'un flag** :
+- **Pas de dépendance captive** : un `ForecastService` singleton qui recevrait un service
+  « démo » par requête garderait le mode de la première requête. Ici rien n'est capturé :
+  seul l'aiguillage est par requête.
+- **Garantie structurelle** : le graphe démo n'a aucune dépendance vers `HttpClient` — il
+  *ne peut pas* appeler le réseau (vérifié en e2e : aucun mock installé, un appel externe
+  ferait échouer le test).
+- **Pas de pollution du cache** : les fausses coordonnées de démo ne peuvent pas être
+  servies ensuite en mode réel (le graphe démo n'utilise jamais le cache du graphe réel).
+- Écartés : conteneur enfant par requête (service locator) et `AsyncLocalStorage`
+  (état caché, exactement le type de dépendance implicite vu en cours).
+
+Le démo renvoie des données **déterministes** (dates fixes, pas d'horloge système).

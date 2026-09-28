@@ -13,7 +13,11 @@ import type { HttpClient } from "./infrastructure/http/HttpClient.js";
 import { FetchHttpClient } from "./infrastructure/http/FetchHttpClient.js";
 import { MetNorwayWeatherProvider } from "./infrastructure/weather/MetNorwayWeatherProvider.js";
 import { OpenMeteoWeatherProvider } from "./infrastructure/weather/OpenMeteoWeatherProvider.js";
+import { DemoGeocoder } from "./infrastructure/demo/DemoGeocoder.js";
+import { DemoWeatherProvider } from "./infrastructure/demo/DemoWeatherProvider.js";
+import { DemoAwareForecastController } from "./presentation/DemoAwareForecastController.js";
 import { ForecastController } from "./presentation/ForecastController.js";
+import type { ForecastHandler } from "./presentation/ForecastHandler.js";
 
 const geocoderImplementations: Record<GeocoderProviderName, interfaces.Newable<Geocoder>> = {
   nominatim: NominatimGeocoder,
@@ -36,7 +40,14 @@ export function buildContainer(): Container {
     .bind<WeatherProvider>(TYPES.WeatherProvider)
     .to(weatherProviderImplementations[config.weatherProvider]);
   container.bind<ForecastService>(TYPES.ForecastService).to(ForecastService);
-  container.bind<ForecastController>(TYPES.ForecastController).to(ForecastController);
+  container.bind<ForecastHandler>(TYPES.LiveForecastController).to(ForecastController);
+  // Graphe "demo" : sans HttpClient, il ne peut structurellement pas appeler le reseau.
+  container
+    .bind<ForecastHandler>(TYPES.DemoForecastController)
+    .toConstantValue(
+      new ForecastController(new ForecastService(new DemoGeocoder(), new DemoWeatherProvider()))
+    );
+  container.bind<ForecastHandler>(TYPES.ForecastController).to(DemoAwareForecastController);
 
   return container;
 }

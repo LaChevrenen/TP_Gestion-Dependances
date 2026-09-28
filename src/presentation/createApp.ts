@@ -1,10 +1,10 @@
 import express, { type Express } from "express";
-import type { ForecastController } from "./ForecastController.js";
+import type { ForecastHandler } from "./ForecastHandler.js";
 
-export function createApp(forecastController: ForecastController): Express {
+export function createApp(forecastHandler: ForecastHandler): Express {
   const app = express();
 
-  app.get("/forecast", forecastController.handleGetForecast);
+  app.get("/forecast", forecastHandler.handleGetForecast);
 
   return app;
 }

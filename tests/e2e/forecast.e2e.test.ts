@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { buildContainer } from "../../src/container.js";
 import { createApp } from "../../src/presentation/createApp.js";
 import { TYPES } from "../../src/types.js";
-import { ForecastController } from "../../src/presentation/ForecastController.js";
+import type { ForecastHandler } from "../../src/presentation/ForecastHandler.js";
 
 const NOMINATIM_BASE_URL = "https://nominatim.e2e-test";
 const OPEN_METEO_BASE_URL = "https://open-meteo.e2e-test";
@@ -55,7 +55,7 @@ function buildTestApp(envOverrides: Record<string, string> = {}): Express {
     ...envOverrides,
   });
   const container = buildContainer();
-  const controller = container.get<ForecastController>(TYPES.ForecastController);
+  const controller = container.get<ForecastHandler>(TYPES.ForecastController);
   const testApp = createApp(controller);
   process.env = { ...originalEnv };
   return testApp;
@@ -221,5 +221,38 @@ describe("Format de sortie unifie (TP3)", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(EXPECTED_BODY);
+  });
+});
+
+describe("Mode demo (TP3)", () => {
+  it("demo=true : reponse au format unifie, sans aucun appel aux services externes", async () => {
+    // Aucun mock installe : un appel externe ferait echouer le test (onUnhandledRequest).
+    const response = await request(app).get("/forecast").query({ address: "Ales", demo: "true" });
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(response.body)).toEqual(Object.keys(EXPECTED_BODY));
+    expect(response.body.hourly.length).toBeGreaterThan(0);
+    for (const point of response.body.hourly) {
+      expect(Object.keys(point)).toEqual(["time", "temperatureCelsius"]);
+      expect(point.time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      expect(typeof point.temperatureCelsius).toBe("number");
+    }
+    expect(hits).toEqual({ nominatim: 0, openMeteo: 0, ban: 0, metNorway: 0 });
+  });
+
+  it("demo=true : la validation de l'adresse reste appliquee (400)", async () => {
+    const response = await request(app).get("/forecast").query({ address: " ", demo: "true" });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("demo=false : appelle bien les services reels", async () => {
+    mockNominatimSuccess();
+    mockOpenMeteoSuccess();
+
+    const response = await request(app).get("/forecast").query({ address: "Ales", demo: "false" });
+
+    expect(response.body).toEqual(EXPECTED_BODY);
+    expect(hits).toMatchObject({ nominatim: 1, openMeteo: 1 });
   });
 });

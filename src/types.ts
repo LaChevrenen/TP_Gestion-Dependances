@@ -5,4 +5,6 @@ export const TYPES = {
   WeatherProvider: Symbol.for("WeatherProvider"),
   ForecastService: Symbol.for("ForecastService"),
   ForecastController: Symbol.for("ForecastController"),
+  LiveForecastController: Symbol.for("LiveForecastController"),
+  DemoForecastController: Symbol.for("DemoForecastController"),
 } as const;
